@@ -1,18 +1,21 @@
 #!/usr/bin/env python3
-"""Author attack animations onto the rigged fighters and bake them into GLB.
+"""Bake each fighter's moveset into his rigged GLB as glTF animations.
 
-Poses are described by where the hands and feet go, not by per-bone Euler
-angles. A punch is "lead fist to here, at this height, at this time"; a
-two-bone IK solver turns that into shoulder and elbow rotations. Authoring
-by angles means guessing how a rotation composes through a parent that has
-already turned, which is unreadable and produces broken-looking limbs.
+Poses come from tools/moves.py and are written as hand and foot targets
+rather than per-bone angles; a two-bone IK solver (tools/rigmath.py) turns
+them into shoulder and elbow rotations. Authoring by angle means predicting
+how a rotation composes through a parent that has already turned, which is
+unreadable and lands limbs in impossible places.
 
-Every clip is written as a glTF animation, so three.js can play it straight
-off the file with AnimationMixer -- no runtime rigging code.
+Takedowns are two-body moves and are handled differently. The man being
+thrown is solved first, run through forward kinematics, and placed in front
+of the attacker; only then are the attacker's hands aimed at grip points
+read off that posed skeleton. Authoring the grab as fixed hand positions
+would look right in one frame and slide off him in every other.
 
-    python3 tools/animate.py                      # all rigged fighters
-    python3 tools/animate.py --list               # show the clip library
-    python3 tools/animate.py --only fighter_apose_01 --preview
+    python3 tools/animate.py                    # all rigged fighters
+    python3 tools/animate.py --list             # every fighter's moveset
+    python3 tools/animate.py --only fighter_apose_01
 
 Requires numpy and scipy.
 """
@@ -24,158 +27,14 @@ import sys
 from pathlib import Path
 
 import numpy as np
-from scipy.spatial.transform import Rotation, Slerp  # noqa: F401
+from scipy.spatial.transform import Rotation
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import moves  # noqa: E402
+from rigmath import Rig  # noqa: E402
 
 REPO = Path(__file__).resolve().parent.parent
 
-# Targets are written in a body-relative frame so one clip fits every fighter:
-#   x = sideways (+ is the fighter's left)
-#   y = height as a fraction of the fighter's own height
-#   z = forward (+ is the way the fighter faces)
-# Reach is expressed as a fraction of the arm's or leg's own length, so a
-# short fighter does not overextend and a tall one does not fall short.
-
-
-def _p(x, y, z):
-    return np.array([x, y, z], np.float64)
-
-
-# ---------------------------------------------------------------------------
-# Pose vocabulary
-#
-# GUARD is the resting stance every clip starts and ends on. Strikes are
-# written as departures from it, which keeps the library short and makes
-# blending between clips land in a consistent place.
-# ---------------------------------------------------------------------------
-
-GUARD = {
-    "hand_L": _p(0.13, 0.79, 0.20), "hand_R": _p(-0.11, 0.82, 0.16),
-    "foot_L": _p(0.16, 0.02, 0.16), "foot_R": _p(-0.17, 0.02, -0.18),
-    "hips": (0.0, -0.30, 0.0), "spine": (0.04, -0.10, 0.0), "chest": (0.0, -0.12, 0.0),
-    "head": (0.0, 0.20, 0.0),
-}
-
-
-def pose(**overrides):
-    """A guard stance with some parts moved."""
-    out = {k: (v.copy() if isinstance(v, np.ndarray) else v) for k, v in GUARD.items()}
-    out.update(overrides)
-    return out
-
-
-# Each clip is (loop, [(time_seconds, pose), ...]).
-CLIPS = {
-    "idle": (True, [
-        (0.00, pose()),
-        (0.90, pose(hand_L=_p(0.13, 0.81, 0.20), hand_R=_p(-0.11, 0.84, 0.16),
-                    chest=(0.0, -0.12, 0.02))),
-        (1.80, pose()),
-    ]),
-    "jab": (False, [
-        (0.00, pose()),
-        (0.09, pose(hand_L=_p(0.10, 0.80, 0.30), chest=(0.0, -0.22, 0.0))),
-        (0.19, pose(hand_L=_p(0.02, 0.84, 0.62), chest=(0.0, 0.10, 0.0),
-                    hips=(0.0, -0.10, 0.0))),
-        (0.34, pose(hand_L=_p(0.09, 0.81, 0.34), chest=(0.0, -0.14, 0.0))),
-        (0.48, pose()),
-    ]),
-    "cross": (False, [
-        (0.00, pose()),
-        (0.10, pose(hand_R=_p(-0.16, 0.83, 0.06), chest=(0.0, -0.34, 0.0),
-                    hips=(0.0, -0.22, 0.0))),
-        (0.24, pose(hand_R=_p(0.01, 0.85, 0.66), chest=(0.0, 0.30, 0.0),
-                    hips=(0.0, 0.24, 0.0), foot_R=_p(-0.17, 0.05, -0.14))),
-        (0.42, pose(hand_R=_p(-0.12, 0.82, 0.24), chest=(0.0, -0.05, 0.0))),
-        (0.58, pose()),
-    ]),
-    "hook": (False, [
-        (0.00, pose()),
-        (0.11, pose(hand_L=_p(0.26, 0.80, 0.10), chest=(0.0, -0.34, 0.0))),
-        (0.26, pose(hand_L=_p(-0.16, 0.86, 0.44), chest=(0.0, 0.34, 0.0),
-                    hips=(0.0, 0.26, 0.0))),
-        (0.44, pose(hand_L=_p(0.10, 0.82, 0.26), chest=(0.0, -0.06, 0.0))),
-        (0.60, pose()),
-    ]),
-    "uppercut": (False, [
-        (0.00, pose()),
-        (0.12, pose(hand_R=_p(-0.14, 0.62, 0.22), chest=(0.10, -0.30, 0.0),
-                    hips=(0.0, -0.18, 0.0))),
-        (0.27, pose(hand_R=_p(-0.04, 1.02, 0.40), chest=(-0.16, 0.20, 0.0),
-                    hips=(0.0, 0.18, 0.0))),
-        (0.45, pose(hand_R=_p(-0.12, 0.83, 0.20))),
-        (0.62, pose()),
-    ]),
-    "kick_low": (False, [
-        (0.00, pose()),
-        (0.12, pose(foot_R=_p(-0.24, 0.14, -0.24), hips=(0.0, -0.22, 0.0))),
-        (0.28, pose(foot_R=_p(-0.06, 0.30, 0.60), hips=(0.0, 0.30, 0.0),
-                    chest=(0.06, 0.22, 0.0), hand_L=_p(0.22, 0.74, 0.10))),
-        (0.48, pose(foot_R=_p(-0.20, 0.06, -0.10), hips=(0.0, 0.05, 0.0))),
-        (0.68, pose()),
-    ]),
-    "kick_high": (False, [
-        (0.00, pose()),
-        (0.14, pose(foot_R=_p(-0.26, 0.18, -0.26), hips=(0.0, -0.28, 0.0),
-                    chest=(0.0, -0.20, 0.0))),
-        (0.34, pose(foot_R=_p(0.00, 0.92, 0.52), hips=(0.0, 0.42, 0.0),
-                    chest=(0.10, 0.34, 0.0), head=(0.0, 0.30, 0.0),
-                    hand_L=_p(0.30, 0.60, 0.04), hand_R=_p(-0.24, 0.92, 0.10))),
-        (0.56, pose(foot_R=_p(-0.22, 0.08, -0.12), hips=(0.0, 0.10, 0.0))),
-        (0.80, pose()),
-    ]),
-    "knee": (False, [
-        (0.00, pose()),
-        (0.11, pose(hips=(0.0, -0.18, 0.0), chest=(-0.10, -0.12, 0.0))),
-        (0.26, pose(foot_R=_p(-0.10, 0.60, 0.34), hips=(-0.12, -0.10, 0.0),
-                    chest=(0.20, -0.08, 0.0),
-                    hand_L=_p(0.10, 0.94, 0.34), hand_R=_p(-0.08, 0.96, 0.30))),
-        (0.44, pose(foot_R=_p(-0.17, 0.06, -0.14))),
-        (0.62, pose()),
-    ]),
-    "block": (False, [
-        (0.00, pose()),
-        (0.10, pose(hand_L=_p(0.14, 0.94, 0.26), hand_R=_p(-0.13, 0.95, 0.24),
-                    chest=(0.14, 0.0, 0.0), head=(0.14, 0.0, 0.0))),
-        (0.40, pose(hand_L=_p(0.14, 0.94, 0.26), hand_R=_p(-0.13, 0.95, 0.24),
-                    chest=(0.14, 0.0, 0.0), head=(0.14, 0.0, 0.0))),
-        (0.55, pose()),
-    ]),
-    "hit_head": (False, [
-        (0.00, pose()),
-        (0.08, pose(head=(-0.34, 0.40, 0.0), chest=(-0.16, 0.26, 0.0),
-                    hand_L=_p(0.20, 0.72, 0.10), hips=(0.0, 0.16, 0.0))),
-        (0.30, pose(head=(0.06, 0.10, 0.0), chest=(0.04, -0.04, 0.0))),
-        (0.50, pose()),
-    ]),
-    "knockdown": (False, [
-        (0.00, pose()),
-        (0.10, pose(head=(-0.40, 0.30, 0.0), chest=(-0.24, 0.20, 0.0))),
-        (0.45, pose(hips=(-0.55, 0.20, 0.0), chest=(-0.40, 0.10, 0.0),
-                    head=(-0.30, 0.0, 0.0),
-                    foot_L=_p(0.20, 0.20, -0.30), foot_R=_p(-0.22, 0.16, -0.34),
-                    hand_L=_p(0.30, 0.30, -0.20), hand_R=_p(-0.30, 0.28, -0.24))),
-        (1.10, pose(hips=(-1.20, 0.10, 0.0), chest=(-0.70, 0.0, 0.0),
-                    head=(-0.20, 0.0, 0.0),
-                    foot_L=_p(0.22, 0.10, -0.55), foot_R=_p(-0.24, 0.08, -0.58),
-                    hand_L=_p(0.34, 0.14, -0.34), hand_R=_p(-0.34, 0.12, -0.36))),
-    ]),
-}
-
-# One signature combination per fighter, built by splicing clips end to end.
-# The overlap trims the recovery tail of each strike so the next one starts
-# before the last has fully reset -- that is what makes a combo read as one
-# motion instead of separate punches.
-COMBOS = {
-    "fighter_apose_01": ("combo_boxer", ["jab", "cross", "hook"], 0.12),
-    "fighter_apose_02": ("combo_kickboxer", ["jab", "cross", "kick_low"], 0.14),
-    "fighter_apose_03": ("combo_clinch", ["uppercut", "knee", "hook"], 0.10),
-    "fighter_apose_04": ("combo_striker", ["jab", "jab", "kick_high"], 0.13),
-}
-
-
-# ---------------------------------------------------------------------------
-# Rig reading and IK
-# ---------------------------------------------------------------------------
 
 def read_glb(path):
     data = path.read_bytes()
@@ -183,190 +42,6 @@ def read_glb(path):
     gltf = json.loads(data[20:20 + json_len])
     bin_len = struct.unpack_from("<I", data, 20 + json_len)[0]
     return gltf, bytearray(data[28 + json_len:28 + json_len + bin_len])
-
-
-def joint_world_positions(gltf):
-    """Rest-pose world position of every joint, plus its node index."""
-    positions, parent_of = {}, {}
-
-    def walk(node_index, origin, parent_name):
-        node = gltf["nodes"][node_index]
-        here = origin + np.array(node.get("translation", [0, 0, 0]), np.float64)
-        name = node.get("name")
-        if name:
-            positions[name] = here
-            parent_of[name] = parent_name
-        for child in node.get("children", []):
-            walk(child, here, name)
-
-    walk(0, np.zeros(3), None)
-    index_of = {n.get("name"): i for i, n in enumerate(gltf["nodes"]) if n.get("name")}
-    return positions, parent_of, index_of
-
-
-def two_bone_ik(root, target, len_upper, len_lower, pole):
-    """Return (elbow, effector) for a two-bone chain reaching toward target."""
-    to_target = target - root
-    reach = np.linalg.norm(to_target)
-    span = len_upper + len_lower
-    reach = float(np.clip(reach, abs(len_upper - len_lower) + 1e-4, span - 1e-4))
-    direction = to_target / (np.linalg.norm(to_target) or 1.0)
-    effector = root + direction * reach
-
-    cos_root = np.clip((len_upper ** 2 + reach ** 2 - len_lower ** 2)
-                       / (2 * len_upper * reach), -1.0, 1.0)
-    angle = float(np.arccos(cos_root))
-
-    # Swing the elbow off the straight line, toward the pole hint.
-    side = pole - direction * float(pole @ direction)
-    norm = np.linalg.norm(side)
-    side = (side / norm if norm > 1e-6
-            else np.cross(direction, [0.0, 0.0, 1.0]))
-    elbow = root + len_upper * (direction * np.cos(angle) + side * np.sin(angle))
-    return elbow, effector
-
-
-def align(from_dir, to_dir):
-    """Shortest rotation carrying one direction onto another."""
-    a = from_dir / (np.linalg.norm(from_dir) or 1.0)
-    b = to_dir / (np.linalg.norm(to_dir) or 1.0)
-    axis = np.cross(a, b)
-    length = np.linalg.norm(axis)
-    if length < 1e-9:
-        if a @ b > 0:
-            return Rotation.identity()
-        fallback = np.cross(a, [1.0, 0.0, 0.0])
-        if np.linalg.norm(fallback) < 1e-6:
-            fallback = np.cross(a, [0.0, 1.0, 0.0])
-        return Rotation.from_rotvec(fallback / np.linalg.norm(fallback) * np.pi)
-    return Rotation.from_rotvec(axis / length * float(np.arctan2(length, a @ b)))
-
-
-class Solver:
-    """Turns a pose (hand/foot targets plus torso angles) into bone rotations."""
-
-    CHAINS = {
-        "hand_L": ("UpperArm_L", "LowerArm_L", "Hand_L"),
-        "hand_R": ("UpperArm_R", "LowerArm_R", "Hand_R"),
-        "foot_L": ("UpperLeg_L", "LowerLeg_L", "Foot_L"),
-        "foot_R": ("UpperLeg_R", "LowerLeg_R", "Foot_R"),
-    }
-    TORSO = {"hips": "Hips", "spine": "Spine", "chest": "Chest", "head": "Head"}
-
-    def __init__(self, rest, parent_of):
-        self.rest = rest
-        self.parent_of = parent_of
-        self.height = max(p[1] for p in rest.values())
-
-    def _world_rotation(self, local, bone):
-        """Accumulated rotation of a bone's parent chain."""
-        rotation = Rotation.identity()
-        chain = []
-        node = self.parent_of.get(bone)
-        while node:
-            chain.append(node)
-            node = self.parent_of.get(node)
-        for name in reversed(chain):
-            rotation = rotation * local.get(name, Rotation.identity())
-        return rotation
-
-    def solve(self, target_pose):
-        local = {}
-        for key, bone in self.TORSO.items():
-            if key in target_pose:
-                local[bone] = Rotation.from_euler("xyz", target_pose[key])
-
-        for key, (upper, lower, tip) in self.CHAINS.items():
-            if key not in target_pose:
-                continue
-            spec = target_pose[key]
-            target = np.array([spec[0] * self.height, spec[1] * self.height,
-                               spec[2] * self.height], np.float64)
-
-            root_rest, mid_rest, tip_rest = self.rest[upper], self.rest[lower], self.rest[tip]
-            parent_rotation = self._world_rotation(local, upper)
-            root = self.rest[self.parent_of[upper]] + parent_rotation.apply(
-                root_rest - self.rest[self.parent_of[upper]])
-
-            len_upper = float(np.linalg.norm(mid_rest - root_rest))
-            len_lower = float(np.linalg.norm(tip_rest - mid_rest))
-            # Elbows point back and out; knees point forward.
-            pole = (np.array([np.sign(root_rest[0]) * 0.5, -0.2, -1.0])
-                    if key.startswith("hand")
-                    else np.array([np.sign(root_rest[0]) * 0.2, -0.2, 1.0]))
-            elbow, effector = two_bone_ik(root, target, len_upper, len_lower, pole)
-
-            upper_now = parent_rotation.apply(mid_rest - root_rest)
-            upper_rotation = align(upper_now, elbow - root)
-            local[upper] = parent_rotation.inv() * upper_rotation * parent_rotation
-
-            after_upper = upper_rotation * parent_rotation
-            lower_now = after_upper.apply(tip_rest - mid_rest)
-            lower_rotation = align(lower_now, effector - elbow)
-            local[lower] = after_upper.inv() * lower_rotation * after_upper
-        return local
-
-
-# ---------------------------------------------------------------------------
-# Baking
-# ---------------------------------------------------------------------------
-
-def splice(clips, order, overlap):
-    """Chain clips into one, trimming `overlap` seconds off each seam."""
-    frames, clock = [], 0.0
-    for i, name in enumerate(order):
-        _, keys = clips[name]
-        cut = keys[:-1] if i < len(order) - 1 else keys
-        for time, target in cut:
-            frames.append((clock + time, target))
-        clock += cut[-1][0] + (0.0 if i == len(order) - 1 else -overlap + cut[-1][0] * 0)
-        clock = frames[-1][0] - overlap if i < len(order) - 1 else clock
-    # Guarantee strictly increasing times after the trims.
-    cleaned = [frames[0]]
-    for time, target in frames[1:]:
-        cleaned.append((max(time, cleaned[-1][0] + 1e-3), target))
-    return cleaned
-
-
-def bake(gltf, blob, solver, index_of, clips):
-    animations, accessors, views = [], gltf["accessors"], gltf["bufferViews"]
-
-    def add(array):
-        raw = array.astype(np.float32).tobytes()
-        raw += b"\x00" * (-len(raw) % 4)
-        views.append({"buffer": 0, "byteOffset": len(blob), "byteLength": len(raw)})
-        blob.extend(raw)
-        accessors.append({
-            "bufferView": len(views) - 1, "componentType": 5126,
-            "count": int(len(array)),
-            "type": "SCALAR" if array.ndim == 1 else f"VEC{array.shape[1]}",
-        })
-        if array.ndim == 1:
-            accessors[-1]["min"] = [float(array.min())]
-            accessors[-1]["max"] = [float(array.max())]
-        return len(accessors) - 1
-
-    for name, (loop, frames) in clips.items():
-        times = np.array([t for t, _ in frames], np.float32)
-        solved = [solver.solve(p) for _, p in frames]
-        bones = sorted({b for s in solved for b in s})
-        channels, samplers = [], []
-        for bone in bones:
-            quats = np.array([s.get(bone, Rotation.identity()).as_quat() for s in solved])
-            # Keep the quaternion path on one hemisphere or the slerp between
-            # keys takes the long way round and the limb spins.
-            for i in range(1, len(quats)):
-                if quats[i] @ quats[i - 1] < 0:
-                    quats[i] = -quats[i]
-            samplers.append({"input": add(times), "output": add(quats),
-                             "interpolation": "LINEAR"})
-            channels.append({"sampler": len(samplers) - 1,
-                             "target": {"node": index_of[bone], "path": "rotation"}})
-        animations.append({"name": name, "channels": channels, "samplers": samplers,
-                           "extras": {"loop": bool(loop),
-                                      "duration": float(times[-1])}})
-    gltf["animations"] = animations
-    return gltf, blob
 
 
 def write_glb(path, gltf, blob):
@@ -381,21 +56,224 @@ def write_glb(path, gltf, blob):
         fh.write(bytes(blob))
 
 
+def read_rig(gltf):
+    """Rest-pose world positions, parent links and node indices for the joints."""
+    positions, parent_of = {}, {}
+
+    def walk(node_index, origin, parent_name):
+        node = gltf["nodes"][node_index]
+        here = origin + np.array(node.get("translation", [0, 0, 0]), float)
+        name = node.get("name")
+        if name:
+            positions[name] = here
+            parent_of[name] = parent_name
+        for child in node.get("children", []):
+            walk(child, here, name)
+
+    walk(0, np.zeros(3), None)
+    # The armature wrapper is not a joint; drop anything not in the skin.
+    joints = {gltf["nodes"][j]["name"] for j in gltf["skins"][0]["joints"]}
+    positions = {k: v for k, v in positions.items() if k in joints}
+    parent_of = {k: (v if v in joints else None)
+                 for k, v in parent_of.items() if k in joints}
+    index_of = {n.get("name"): i for i, n in enumerate(gltf["nodes"]) if n.get("name")}
+    return positions, parent_of, index_of
+
+
+def grip_point(world_pos, spec):
+    """World position of a hold: along a bone, pushed out to the limb surface."""
+    joint_a, joint_b, along, outward = spec
+    a, b = world_pos[joint_a], world_pos[joint_b]
+    point = a + (b - a) * along
+    axis = b - a
+    length = np.linalg.norm(axis)
+    if length > 1e-9:
+        axis = axis / length
+        side = np.cross(axis, [0.0, 1.0, 0.0])
+        if np.linalg.norm(side) < 1e-6:
+            side = np.cross(axis, [0.0, 0.0, 1.0])
+        point = point + side / (np.linalg.norm(side) or 1.0) * outward
+    return point
+
+
+def solve_takedown(rig, spec):
+    """Solve both bodies for a takedown; returns attacker and victim tracks.
+
+    The attacker's forward and sideways position is derived from the hold
+    rather than authored. Hand-written root motion cannot keep up with a man
+    being thrown -- the grip is reachable in the frame it was tuned for and
+    the arms stretch off him in every other. Solving the stance from the grip
+    means the thrower stays with his opponent through the whole throw.
+    """
+    yaw = Rotation.from_euler("y", spec["yaw"])
+    place = np.asarray(spec["offset"], float) * rig.height
+    arm = (np.linalg.norm(rig.rest["LowerArm_L"] - rig.rest["UpperArm_L"])
+           + np.linalg.norm(rig.rest["Hand_L"] - rig.rest["LowerArm_L"]))
+    hold_at = 0.78 * arm     # how far in front of the chest a grip should sit
+    rise = 0.75              # how much of the grip's drop the chest follows
+
+    attacker, victim = [], []
+    for time, attacker_pose, victim_pose, grips in spec["frames"]:
+        victim_local, victim_offset = rig.solve(victim_pose)
+        victim.append((time, victim_local, victim_offset))
+
+        if not grips:
+            attacker.append((time, *rig.solve(attacker_pose)))
+            continue
+
+        # The victim is solved in his own space; move him into the attacker's
+        # before reading any hold off him.
+        world_pos, _ = rig.fk(victim_local, victim_offset)
+        targets = {hand: yaw.apply(grip_point(world_pos, hold)) + place
+                   for hand, hold in grips.items()}
+        centre = np.mean(list(targets.values()), axis=0)
+
+        # Turn the attacker to face the hold and step him so it lands at arm's
+        # length. Facing matters as much as distance: an authored torso twist
+        # of half a radian swings the far shoulder back until that arm can no
+        # longer reach, which is why the near hand would land on the opponent
+        # and the far one hang in the air. The authored vertical drop is kept
+        # -- that is the level change, not a byproduct.
+        working = dict(attacker_pose)
+        pitch, _, roll = working.get("hips", (0.0, 0.0, 0.0))
+        for _ in range(2):
+            local, offset = rig.solve(working)
+            world = rig.fk(local, offset)[0]
+            to_hold = centre - world["Hips"]
+            working["hips"] = (pitch, float(np.arctan2(to_hold[0], to_hold[2])), roll)
+
+            local, offset = rig.solve(working)
+            chest = rig.fk(local, offset)[0]["Chest"]
+            facing = Rotation.from_euler("y", working["hips"][1]).apply([0.0, 0.0, 1.0])
+            wanted = centre - facing * hold_at
+            # Height is solved too, not just the footprint. Finishing a
+            # takedown means going down with the man you are holding; pinning
+            # the attacker at his authored height leaves him standing upright
+            # with his arms stretched to a grip on the floor.
+            offset = offset + np.array([wanted[0] - chest[0],
+                                        (wanted[1] - chest[1]) * rise,
+                                        wanted[2] - chest[2]])
+            # He finishes a takedown kneeling on the mat, so the floor is
+            # roughly where his own hips would be if he knelt -- not standing height.
+            offset[1] = max(offset[1], -0.44 * rig.height)
+            working["root"] = tuple(offset / rig.height)
+
+        attacker.append((time, *rig.solve(working, extra_targets=targets)))
+    return attacker, victim
+
+
+def solve_clip(rig, frames):
+    return [(time, *rig.solve(target)) for time, target in frames]
+
+
+def splice(tracks, overlap):
+    """Chain solved tracks end to end, trimming `overlap` off each seam."""
+    out, clock = [], 0.0
+    for i, track in enumerate(tracks):
+        for time, local, offset in track:
+            out.append((clock + time, local, offset))
+        clock = out[-1][0] - (overlap if i < len(tracks) - 1 else 0.0)
+    cleaned = [out[0]]
+    for time, local, offset in out[1:]:
+        cleaned.append((max(time, cleaned[-1][0] + 1e-3), local, offset))
+    return cleaned
+
+
+def bake(gltf, blob, tracks, index_of, hips_rest, loops):
+    accessors, views = gltf["accessors"], gltf["bufferViews"]
+
+    def add(array, kind):
+        raw = np.ascontiguousarray(array, np.float32).tobytes()
+        raw += b"\x00" * (-len(raw) % 4)
+        views.append({"buffer": 0, "byteOffset": len(blob), "byteLength": len(raw)})
+        blob.extend(raw)
+        accessors.append({"bufferView": len(views) - 1, "componentType": 5126,
+                          "count": int(len(array)), "type": kind})
+        if kind == "SCALAR":
+            accessors[-1]["min"] = [float(np.min(array))]
+            accessors[-1]["max"] = [float(np.max(array))]
+        return len(accessors) - 1
+
+    animations = []
+    for name, track in tracks.items():
+        times = np.array([t for t, _, _ in track], np.float32)
+        time_accessor = add(times, "SCALAR")
+        bones = sorted({b for _, local, _ in track for b in local})
+
+        channels, samplers = [], []
+        for bone in bones:
+            quats = np.array([local.get(bone, Rotation.identity()).as_quat()
+                              for _, local, _ in track])
+            # Keep the path on one hemisphere, or the slerp between two keys
+            # takes the long way round and the limb spins through the body.
+            for i in range(1, len(quats)):
+                if quats[i] @ quats[i - 1] < 0:
+                    quats[i] = -quats[i]
+            samplers.append({"input": time_accessor, "output": add(quats, "VEC4"),
+                             "interpolation": "LINEAR"})
+            channels.append({"sampler": len(samplers) - 1,
+                             "target": {"node": index_of[bone], "path": "rotation"}})
+
+        offsets = np.array([offset for _, _, offset in track])
+        if np.abs(offsets).max() > 1e-6:
+            # Root motion: a level change drops the hips, a takedown drives
+            # them forward, a knockdown puts them on the floor.
+            samplers.append({"input": time_accessor,
+                             "output": add(hips_rest + offsets, "VEC3"),
+                             "interpolation": "LINEAR"})
+            channels.append({"sampler": len(samplers) - 1,
+                             "target": {"node": index_of["Hips"], "path": "translation"}})
+
+        animations.append({"name": name, "channels": channels, "samplers": samplers,
+                           "extras": {"loop": bool(loops.get(name, False)),
+                                      "duration": float(times[-1])}})
+    gltf["animations"] = animations
+    return gltf, blob
+
+
+def build_tracks(rig, fighter_key):
+    clips, spec, stance, _ = moves.moveset(fighter_key)
+    tracks, loops = {}, {}
+
+    for name, (loop, frames) in clips.items():
+        tracks[name] = solve_clip(rig, frames)
+        loops[name] = loop
+
+    # Takedowns produce a clip for the thrower and one for the man thrown.
+    # Both go into every fighter's file: anyone can end up on either end.
+    for name, takedown in moves.TAKEDOWNS.items():
+        attacker, victim = solve_takedown(rig, takedown)
+        tracks[f"{name}_victim"] = victim
+        if name in spec["signature"] or any(
+                name in order for order, _ in spec["combos"].values()):
+            tracks[name] = attacker
+
+    for name, (order, overlap) in spec["combos"].items():
+        missing = [m for m in order if m not in tracks]
+        if missing:
+            raise SystemExit(f"{fighter_key}: combo {name} wants {missing}")
+        tracks[name] = splice([tracks[m] for m in order], overlap)
+        loops[name] = False
+    return tracks, loops, spec
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--src", type=Path, default=REPO / "build" / "rigged")
     ap.add_argument("--out", type=Path, default=REPO / "build" / "animated")
     ap.add_argument("--only", action="append")
-    ap.add_argument("--list", action="store_true", help="print the clip library and exit")
+    ap.add_argument("--list", action="store_true")
     args = ap.parse_args()
 
     if args.list:
-        for name, (loop, frames) in CLIPS.items():
-            print(f"  {name:12} {frames[-1][0]:.2f}s  {len(frames)} keys"
-                  f"{'  (loops)' if loop else ''}")
-        for fighter, (name, order, _) in COMBOS.items():
-            print(f"  {name:12} {fighter} = {' -> '.join(order)}")
+        for key, spec in moves.FIGHTERS.items():
+            clips, _, _, _ = moves.moveset(key)
+            print(f"\n{spec['name']}  ({key}, {spec['stance']})")
+            print(f"  базовые:   {', '.join(sorted(clips))}")
+            print(f"  фирменные: {', '.join(spec['signature'])}")
+            for name, (order, _) in spec["combos"].items():
+                print(f"  {name}: {' -> '.join(order)}")
         return
 
     sources = ([args.src / f"{s}.glb" for s in args.only] if args.only
@@ -405,21 +283,25 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
 
     for src in sources:
+        if src.stem not in moves.FIGHTERS:
+            print(f"{src.stem:22} SKIPPED -- no moveset defined")
+            continue
         gltf, blob = read_glb(src)
-        rest, parent_of, index_of = joint_world_positions(gltf)
-        solver = Solver(rest, parent_of)
+        rest, parent_of, index_of = read_rig(gltf)
+        rig = Rig(rest, parent_of)
+        hips_rest = np.array(gltf["nodes"][index_of["Hips"]].get("translation", [0, 0, 0]),
+                             float)
 
-        clips = dict(CLIPS)
-        if src.stem in COMBOS:
-            name, order, overlap = COMBOS[src.stem]
-            clips[name] = (False, splice(CLIPS, order, overlap))
+        tracks, loops, spec = build_tracks(rig, src.stem)
+        gltf, blob = bake(gltf, blob, tracks, index_of, hips_rest, loops)
 
-        gltf, blob = bake(gltf, blob, solver, index_of, clips)
         dst = args.out / src.name
         write_glb(dst, gltf, blob)
-        total = sum(a["extras"]["duration"] for a in gltf["animations"])
-        print(f"{src.stem:22} {len(clips):2d} clips  {total:5.2f}s total  "
-              f"{dst.stat().st_size / 1e6:5.2f} MB")
+        attacks = sum(1 for n in tracks if not n.endswith("_victim")
+                      and n not in ("idle", "block", "slip", "hit_head", "hit_body",
+                                    "knockdown", "get_up", "step_in"))
+        print(f"{spec['name']:8} {src.stem:20} {len(tracks):2d} clips "
+              f"({attacks} атак)  {dst.stat().st_size / 1e6:5.2f} MB")
 
 
 if __name__ == "__main__":
