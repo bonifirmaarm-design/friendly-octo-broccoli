@@ -134,9 +134,11 @@ def find_extremities(pos, adj, height, samples=9):
         raise RuntimeError("could not find a hand on each side")
     hands = (max(right, key=lambda t: -pos[t, 0]), max(left, key=lambda t: pos[t, 0]))
 
-    # +X is the model's left in this orientation.
+    # +X is the model's left in this orientation, so the -X member of each
+    # pair is the right limb. Arms and legs must agree on this or a rig built
+    # from the labels ends up with its legs mirrored against its arms.
     return {HEAD: crown, ARM_R: hands[0], ARM_L: hands[1],
-            LEG_L: feet[0], LEG_R: feet[1]}
+            LEG_R: feet[0], LEG_L: feet[1]}
 
 
 def min_cut(pos, edges, lengths, n, source, sink):
