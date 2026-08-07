@@ -1,0 +1,9 @@
+newmtl fighter_apose_04
+Ka 0.000 0.000 0.000
+Kd 1.000 1.000 1.000
+Ks 0.200 0.200 0.200
+Ns 40.0
+d 1.0
+illum 2
+map_Kd fighter_apose_04_basecolor.jpg
+map_Pr fighter_apose_04_metallic_roughness.jpg
