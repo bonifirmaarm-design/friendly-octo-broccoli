@@ -128,10 +128,25 @@ def write_glb(path, positions, normals, indices, name):
         fh.write(blob)
 
 
+def write_obj(path, positions, normals, indices, name):
+    """Wavefront OBJ -- what Mixamo's auto-rigger accepts (it will not take STL)."""
+    with open(path, "w") as fh:
+        fh.write(f"# {name}\no {name}\n")
+        for p in positions:
+            fh.write(f"v {p[0]:.6f} {p[1]:.6f} {p[2]:.6f}\n")
+        for n in normals:
+            fh.write(f"vn {n[0]:.6f} {n[1]:.6f} {n[2]:.6f}\n")
+        for a, b, c in indices + 1:  # OBJ indices are 1-based
+            fh.write(f"f {a}//{a} {b}//{b} {c}//{c}\n")
+
+
 def main():
     ap = argparse.ArgumentParser(description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter)
     ap.add_argument("--src", type=Path, default=REPO / "assets" / "models")
-    ap.add_argument("--out", type=Path, default=REPO / "build" / "glb")
+    ap.add_argument("--out", type=Path, default=None,
+                    help="output directory (default build/glb or build/obj by --format)")
+    ap.add_argument("--format", choices=("glb", "obj"), default="glb",
+                    help="glb for the engine, obj to upload to Mixamo")
     ap.add_argument("--scale", type=float, default=1.0,
                     help="uniform scale applied before export; sources are normalised to a 2-unit "
                          "box, so 0.925 makes a full-height figure roughly 1.85 m")
@@ -149,14 +164,18 @@ def main():
     sources = sorted(args.src.glob("*.stl"))
     if not sources:
         sys.exit(f"no .stl files under {args.src}")
-    args.out.mkdir(parents=True, exist_ok=True)
+    out = args.out or REPO / "build" / args.format
+    out.mkdir(parents=True, exist_ok=True)
 
     for src in sources:
         tri = load_stl(src)
         scale = scales.get(src.stem, args.scale)
         positions, normals, indices = weld(tri, not args.keep_z_up, scale)
-        dst = args.out / (src.stem + ".glb")
-        write_glb(dst, positions, normals, indices, src.stem)
+        dst = out / f"{src.stem}.{args.format}"
+        if args.format == "glb":
+            write_glb(dst, positions, normals, indices, src.stem)
+        else:
+            write_obj(dst, positions, normals, indices, src.stem)
         size = positions.max(0) - positions.min(0)
         print(f"{src.stem:32} {len(tri):6d} tris  {len(tri) * 3:7d} -> {len(positions):6d} verts  "
               f"x{scale:<6.3f} {size[0]:4.2f}x{size[1]:4.2f}x{size[2]:4.2f} m  "

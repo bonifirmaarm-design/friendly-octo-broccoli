@@ -14,7 +14,8 @@ assets/
   previews/    отрендеренные превью (спереди / 3-4 / сбоку)
   scales.json  множители масштаба для приведения к реальным размерам
 tools/
-  stl_to_glb.py  конвертер STL -> GLB (сварка вершин, сглаженные нормали, Y-up)
+  stl_to_glb.py  конвертер STL -> GLB и OBJ (сварка вершин, нормали, Y-up)
+  segment.py     авторазделение фигуры на голову/руки/ноги/торс
 docs/
   ANIMATION.md   что нужно, чтобы это анимировать
 CATALOG.md       каталог моделей с превью
@@ -29,8 +30,10 @@ CATALOG.md       каталог моделей с превью
 ## Быстрый старт
 
 ```bash
-pip install numpy
-python3 tools/stl_to_glb.py --scales    # -> build/glb/*.glb
+pip install numpy scipy pillow
+python3 tools/stl_to_glb.py --scales                 # -> build/glb/*.glb  (движок)
+python3 tools/stl_to_glb.py --format obj --scales    # -> build/obj/*.obj  (загрузка в Mixamo)
+python3 tools/segment.py                             # -> build/segmentation/ + превью
 ```
 
 ## Про анимацию — коротко
@@ -45,6 +48,13 @@ STL хранит только треугольники. В нём **нет и н
 
 При этом кровь, камеры, боевая логика и HUD от моделей не зависят и делаются
 параллельно. Полный разбор — в [docs/ANIMATION.md](docs/ANIMATION.md).
+
+`tools/segment.py` уже умеет разделять фигуру автоматически. Голова, кисти и
+голени отделяются на всех моделях; **рука целиком — только у
+`fighter_gloves_b`**, потому что у остальных руки висят вплотную и приварены
+к торсу. Это главный кандидат в основного бойца.
+
+![segmentation](assets/previews/segmentation/fighter_gloves_b.png)
 
 ## Известные пробелы
 
