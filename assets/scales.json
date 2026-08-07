@@ -1,0 +1,25 @@
+{
+  "_comment": "Every source STL was independently normalised into a 2-unit box, so relative scale between assets is lost. These are per-asset uniform multipliers that bring each mesh to a plausible real-world size in metres. Used by tools/stl_to_glb.py --scales. Adjust to taste; only the human figures are tightly constrained.",
+  "_default": 0.925,
+
+  "fighter_bearded_a": 0.925,
+  "fighter_bearded_d": 0.925,
+  "fighter_gloves_b": 0.925,
+  "fighter_lean_c": 0.925,
+  "mannequin_base_a": 0.925,
+  "mannequin_base_b": 0.925,
+  "npc_suit_bald_a": 0.925,
+  "npc_suit_haired_b": 0.925,
+  "npc_suit_c": 0.925,
+  "npc_official_jacket": 0.925,
+  "npc_commentator_mic": 0.925,
+  "npc_interviewer_tracksuit": 0.925,
+  "npc_cameraman_handheld": 0.925,
+  "npc_cameraman_tripod": 0.925,
+
+  "prop_championship_belt": 0.65,
+  "prop_water_bottle": 0.121,
+  "prop_folded_towel": 0.33,
+  "prop_round_tub": 0.251,
+  "apparel_rashguard_longsleeve": 0.352
+}
