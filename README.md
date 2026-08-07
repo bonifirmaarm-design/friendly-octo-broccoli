@@ -4,10 +4,14 @@
 
 ## Статус
 
-Четыре бойца отригованы и анимированы. У каждого **27 клипов, из них 15
-атак**: свой набор ударов, броски с настоящим захватом соперника, реакции,
-нокдаун, подъём и две комбинации. Всё считается автоматически из самих мешей —
-ни один сустав и ни одна поза не выставлены вручную в 3D-редакторе.
+Четыре бойца отригованы и анимированы. У каждого **34–36 клипов, из них
+22–24 атаки**: свой набор ударов, броски с настоящим захватом соперника,
+уходы в стороны, три вида блока, реакции, нокдаун, подъём и три комбинации,
+включая добивание сверху после броска. Всё считается автоматически из самих
+мешей — ни один сустав и ни одна поза не выставлены вручную в 3D-редакторе.
+
+`python3 tools/validate.py` проверяет каждый клип на NaN, провал сквозь мат и
+на рывки между кадрами.
 
 ![combos](assets/previews/anim/combos.gif)
 
@@ -33,7 +37,8 @@ CATALOG.md            каталог всех моделей с превью
 ```bash
 pip install numpy scipy pillow
 python3 tools/autorig.py     # assets/fighters -> build/rigged/*.glb  (скелет + скиннинг)
-python3 tools/animate.py     # build/rigged   -> build/animated/*.glb (27 клипов)
+python3 tools/animate.py     # build/rigged   -> build/animated/*.glb (34-36 клипов)
+python3 tools/validate.py    # проверка всех клипов
 python3 tools/animate.py --list
 ```
 
@@ -52,8 +57,14 @@ python3 tools/animate.py --list
 | `fighter_apose_03` | islam | ортодокс | ударка плюс перевод: подсечка, обхват, добивание |
 | `fighter_apose_04` | conor | **левша** | левый прямой, вертушка с ноги, тип |
 
-Общие для всех: `idle`, `step_in`, `block`, `slip`, `hit_head`, `hit_body`,
-`knockdown`, `get_up`.
+Общие для всех: `idle`, `step_in`, `back_step`, `slip`, `weave`,
+`dodge_left`, `dodge_right`, `block`, `block_high`, `block_body`, `cover_up`,
+`hit_head`, `hit_body`, `knockdown`, `get_up`.
+
+![defence](assets/previews/anim/defence.gif)
+
+Полный разбор каждой атаки по бойцам — в
+[`assets/previews/anim/attacks/`](assets/previews/anim/attacks/).
 
 Ударный пул: `jab`, `cross`, `hook_L/R`, `uppercut_L/R`, `overhand_R`,
 `body_hook`, `elbow`, `spinning_elbow`, `spinning_back_kick`, `kick_low`,

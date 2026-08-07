@@ -12,23 +12,38 @@ spelling that out twenty times invites twenty slightly different rhythms.
 
 import numpy as np
 
+from rigmath import Reach
+
 
 def p(x, y, z):
     return np.array([x, y, z], float)
 
 
 # The stance everything departs from and returns to.
+#
+# Reach matters more here than in any strike, because this is the pose held
+# between all the others. A strike may aim past what the arm can cover -- the
+# solver answers with a fully extended arm pointing that way, which is what a
+# punch looks like anyway. A guard may not: aim the fists too far out and the
+# same clamp leaves a man standing with his arms straight instead of covering
+# up. Both fists therefore sit near 55-60% of arm reach, measured from where
+# the shoulder ends up once the stance has bladed the torso, not from where it
+# rests. Knee bend comes from dropping the hips; a standing leg really is
+# almost straight, so pulling the feet in to bend the knees lifts them off the
+# mat instead.
 GUARD = {
-    "hand_L": p(0.13, 0.79, 0.20), "hand_R": p(-0.11, 0.82, 0.16),
+    "hand_L": Reach((-0.30, 0.35, 0.89), 0.55),
+    "hand_R": Reach((0.34, 0.34, 0.88), 0.58),
     "foot_L": p(0.16, 0.02, 0.16), "foot_R": p(-0.17, 0.02, -0.18),
-    "root": (0.0, 0.0, 0.0),
+    "root": (0.0, -0.035, 0.0),
     "hips": (0.0, -0.30, 0.0), "spine": (0.04, -0.10, 0.0), "chest": (0.0, -0.12, 0.0),
     "head": (0.0, 0.20, 0.0),
 }
 
 SOUTHPAW = dict(GUARD)   # lead side mirrored; Conor fights out of it
 SOUTHPAW.update({
-    "hand_L": p(0.11, 0.82, 0.16), "hand_R": p(-0.13, 0.79, 0.20),
+    "hand_L": Reach((-0.34, 0.34, 0.88), 0.58),
+    "hand_R": Reach((0.30, 0.35, 0.89), 0.55),
     "foot_L": p(0.17, 0.02, -0.18), "foot_R": p(-0.16, 0.02, 0.16),
     "hips": (0.0, 0.30, 0.0), "spine": (0.04, 0.10, 0.0), "chest": (0.0, 0.12, 0.0),
     "head": (0.0, -0.20, 0.0),
@@ -61,7 +76,13 @@ def strike(limb, windup, impact, *, base=None, load=None, fire=None,
         frames.append((t_fire + hold, pose(base, **{limb: impact},
                                            **(fire or {}), **carry)))
     tail = hold
-    midpoint = (np.asarray(impact) + np.asarray(GUARD.get(limb, impact))) / 2
+    rest_target = GUARD.get(limb, impact)
+    if isinstance(rest_target, Reach):
+        # The guard fists are reach-relative, so there is no coordinate to
+        # average against; fall back to easing off the strike itself.
+        midpoint = np.asarray(impact) * 0.55 + np.asarray(windup) * 0.45
+    else:
+        midpoint = (np.asarray(impact) + np.asarray(rest_target)) / 2
     frames.append((t_settle + tail, pose(base, **{limb: midpoint},
                                          **(recover or {}), **carry)))
     frames.append((t_end + tail, pose(base, **carry)))
@@ -79,8 +100,8 @@ def base_clips(stance=None):
     return {
         "idle": (True, [
             (0.00, pose(g)),
-            (0.90, pose(g, hand_L=g["hand_L"] + p(0, 0.02, 0),
-                        hand_R=g["hand_R"] + p(0, 0.02, 0),
+            (0.90, pose(g, hand_L=g["hand_L"].nudged(0.03),
+                        hand_R=g["hand_R"].nudged(0.03),
                         chest=(0.0, -0.12 * turn, 0.02))),
             (1.80, pose(g)),
         ]),
@@ -104,6 +125,88 @@ def base_clips(stance=None):
             (0.12, pose(g, chest=(0.10, -0.30 * turn, 0.30), head=(0.06, 0.0, 0.34),
                         hips=(0.0, -0.20 * turn, 0.10))),
             (0.34, pose(g)),
+        ]),
+        # Evasion. The body leans away first and the feet catch up -- stepping
+        # squarely sideways with the torso upright reads as strafing, not as
+        # slipping a punch.
+        "dodge_left": (False, [
+            (0.00, pose(g)),
+            (0.11, pose(g, root=(0.06, -0.02, 0.0), chest=(0.06, 0.0, 0.34),
+                        head=(0.04, 0.0, 0.30),
+                        foot_L=g["foot_L"] + p(0.12, 0.0, 0.0))),
+            (0.26, pose(g, root=(0.13, -0.01, 0.0), chest=(0.04, 0.0, 0.22),
+                        head=(0.02, 0.0, 0.18),
+                        foot_L=g["foot_L"] + p(0.13, 0.0, 0.0),
+                        foot_R=g["foot_R"] + p(0.13, 0.0, 0.0))),
+            (0.44, pose(g, root=(0.13, 0.0, 0.0),
+                        foot_L=g["foot_L"] + p(0.13, 0.0, 0.0),
+                        foot_R=g["foot_R"] + p(0.13, 0.0, 0.0))),
+        ]),
+        "dodge_right": (False, [
+            (0.00, pose(g)),
+            (0.11, pose(g, root=(-0.06, -0.02, 0.0), chest=(0.06, 0.0, -0.34),
+                        head=(0.04, 0.0, -0.30),
+                        foot_R=g["foot_R"] + p(-0.12, 0.0, 0.0))),
+            (0.26, pose(g, root=(-0.13, -0.01, 0.0), chest=(0.04, 0.0, -0.22),
+                        head=(0.02, 0.0, -0.18),
+                        foot_L=g["foot_L"] + p(-0.13, 0.0, 0.0),
+                        foot_R=g["foot_R"] + p(-0.13, 0.0, 0.0))),
+            (0.44, pose(g, root=(-0.13, 0.0, 0.0),
+                        foot_L=g["foot_L"] + p(-0.13, 0.0, 0.0),
+                        foot_R=g["foot_R"] + p(-0.13, 0.0, 0.0))),
+        ]),
+        "weave": (False, [
+            (0.00, pose(g)),
+            (0.13, pose(g, root=(0.05, -0.11, 0.02), chest=(0.30, 0.0, 0.26),
+                        head=(0.20, 0.0, 0.22))),
+            (0.28, pose(g, root=(-0.05, -0.13, 0.03), chest=(0.34, 0.0, -0.26),
+                        head=(0.22, 0.0, -0.22))),
+            (0.46, pose(g, root=(-0.04, -0.03, 0.0), chest=(0.10, 0.0, -0.08))),
+            (0.62, pose(g)),
+        ]),
+        "back_step": (False, [
+            (0.00, pose(g)),
+            (0.16, pose(g, root=(0.0, -0.01, -0.10), chest=(-0.06, 0.0, 0.0),
+                        foot_R=g["foot_R"] + p(0, 0.05, -0.12))),
+            (0.36, pose(g, root=(0.0, 0.0, -0.20),
+                        foot_L=g["foot_L"] + p(0, 0, -0.20),
+                        foot_R=g["foot_R"] + p(0, 0, -0.20))),
+        ]),
+        # Three covers, because they defend different things: hands high for
+        # the head, elbows down for the body, and a full shell to sit behind.
+        "block_high": (False, [
+            (0.00, pose(g)),
+            (0.08, pose(g, hand_L=Reach((-0.34, 0.72, 0.60), 0.62),
+                        hand_R=Reach((0.34, 0.72, 0.60), 0.62),
+                        chest=(0.10, 0.0, 0.0), head=(0.16, 0.0, 0.0))),
+            (0.34, pose(g, hand_L=Reach((-0.34, 0.72, 0.60), 0.62),
+                        hand_R=Reach((0.34, 0.72, 0.60), 0.62),
+                        chest=(0.10, 0.0, 0.0), head=(0.16, 0.0, 0.0))),
+            (0.50, pose(g)),
+        ]),
+        "block_body": (False, [
+            (0.00, pose(g)),
+            (0.09, pose(g, hand_L=Reach((-0.20, -0.30, 0.93), 0.52),
+                        hand_R=Reach((0.20, -0.30, 0.93), 0.52),
+                        chest=(0.26, 0.0, 0.0), head=(0.18, 0.0, 0.0),
+                        root=(0.0, -0.06, 0.0))),
+            (0.34, pose(g, hand_L=Reach((-0.20, -0.30, 0.93), 0.52),
+                        hand_R=Reach((0.20, -0.30, 0.93), 0.52),
+                        chest=(0.26, 0.0, 0.0), head=(0.18, 0.0, 0.0),
+                        root=(0.0, -0.06, 0.0))),
+            (0.52, pose(g)),
+        ]),
+        "cover_up": (False, [
+            (0.00, pose(g)),
+            (0.10, pose(g, hand_L=Reach((-0.10, 0.80, 0.59), 0.55),
+                        hand_R=Reach((0.10, 0.80, 0.59), 0.55),
+                        chest=(0.30, 0.0, 0.0), head=(0.26, 0.0, 0.0),
+                        root=(0.0, -0.08, -0.02))),
+            (0.70, pose(g, hand_L=Reach((-0.10, 0.80, 0.59), 0.55),
+                        hand_R=Reach((0.10, 0.80, 0.59), 0.55),
+                        chest=(0.32, 0.0, 0.02), head=(0.28, 0.0, 0.0),
+                        root=(0.0, -0.09, -0.02))),
+            (0.90, pose(g)),
         ]),
         "hit_head": (False, [
             (0.00, pose(g)),
@@ -492,16 +595,21 @@ FIGHTERS = {
         "combos": {
             "combo_chain_wrestle": (["jab", "overhand_R", "level_change"], 0.12),
             "combo_smash": (["cross", "knee", "takedown_double_leg"], 0.14),
+            # The takedown is not the end of the exchange: whoever lands it
+            # starts hitting from the top.
+            "combo_ground_and_pound": (["takedown_double_leg", "ground_pound"], 0.10),
         },
     },
     "fighter_apose_02": {
         "name": "jones", "stance": "orthodox",
         "signature": ["oblique_kick", "side_kick", "spinning_elbow", "elbow",
                       "flying_knee", "superman_punch", "kick_high", "front_kick",
-                      "jab", "cross", "hook_R", "knee", "takedown_double_leg"],
+                      "jab", "cross", "hook_R", "knee", "takedown_double_leg",
+                      "ground_pound"],
         "combos": {
             "combo_range": (["oblique_kick", "jab", "side_kick"], 0.13),
             "combo_elbows": (["jab", "elbow", "spinning_elbow"], 0.11),
+            "combo_ground_and_pound": (["takedown_double_leg", "ground_pound"], 0.10),
         },
     },
     "fighter_apose_03": {
@@ -512,6 +620,7 @@ FIGHTERS = {
         "combos": {
             "combo_grind": (["jab", "cross", "trip_throw"], 0.13),
             "combo_strike_takedown": (["kick_low", "cross", "takedown_double_leg"], 0.14),
+            "combo_ground_and_pound": (["trip_throw", "ground_pound"], 0.10),
         },
     },
     "fighter_apose_04": {

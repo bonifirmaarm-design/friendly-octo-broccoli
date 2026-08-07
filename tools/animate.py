@@ -167,16 +167,26 @@ def solve_clip(rig, frames):
 
 
 def splice(tracks, overlap):
-    """Chain solved tracks end to end, trimming `overlap` off each seam."""
+    """Chain solved tracks end to end, dropping `overlap` of each recovery tail.
+
+    The tail is cut away, not overlapped. Shifting the next clip back in time
+    puts its opening frame before the previous clip's last one, and forcing the
+    timeline back into ascending order then squeezes two completely different
+    poses a millisecond apart -- which reads as the fighter snapping between
+    them, and measures as limb speeds in the hundreds of body heights per
+    second.
+    """
     out, clock = [], 0.0
     for i, track in enumerate(tracks):
-        for time, local, offset in track:
+        end = track[-1][0]
+        limit = end - overlap if i < len(tracks) - 1 else end
+        kept = [f for f in track if f[0] <= limit + 1e-9]
+        if len(kept) < 2:
+            kept = track[:2]
+        for time, local, offset in kept:
             out.append((clock + time, local, offset))
-        clock = out[-1][0] - (overlap if i < len(tracks) - 1 else 0.0)
-    cleaned = [out[0]]
-    for time, local, offset in out[1:]:
-        cleaned.append((max(time, cleaned[-1][0] + 1e-3), local, offset))
-    return cleaned
+        clock = out[-1][0]
+    return out
 
 
 def bake(gltf, blob, tracks, index_of, hips_rest, loops):

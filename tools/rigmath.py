@@ -58,6 +58,35 @@ def align(from_dir, to_dir):
     return Rotation.from_rotvec(axis / length * float(np.arctan2(length, a @ b)))
 
 
+class Reach:
+    """A target placed relative to a limb's own root, in units of limb length.
+
+    Absolute coordinates cannot express "fists up by the chin" across four
+    fighters: they have different shoulder positions, so one number leaves one
+    man covering up and another standing with his arms straight. Held poses --
+    the guard above all -- need to hold their *extension*, not their
+    coordinates, so they are written as a direction and a fraction of reach
+    from wherever that fighter's shoulder actually ends up.
+    """
+
+    __slots__ = ("direction", "fraction")
+
+    def __init__(self, direction, fraction):
+        self.direction = np.asarray(direction, float)
+        self.fraction = float(fraction)
+
+    def at(self, fraction):
+        """The same direction, held at a different extension."""
+        return Reach(self.direction, fraction)
+
+    def nudged(self, delta):
+        return Reach(self.direction, self.fraction + delta)
+
+    def resolve(self, root, limb_length):
+        d = self.direction / (np.linalg.norm(self.direction) or 1.0)
+        return root + d * limb_length * self.fraction
+
+
 class Rig:
     """A fighter's rest skeleton, with FK and limb IK on top of it."""
 
@@ -143,8 +172,17 @@ class Rig:
 
         targets = {}
         for key in self.CHAINS:
-            if key in target_pose:
-                targets[key] = np.asarray(target_pose[key], float) * self.height
+            if key not in target_pose:
+                continue
+            spec = target_pose[key]
+            if isinstance(spec, Reach):
+                upper, lower, tip = self.CHAINS[key]
+                limb = (np.linalg.norm(self.rest[lower] - self.rest[upper])
+                        + np.linalg.norm(self.rest[tip] - self.rest[lower]))
+                root = self.fk(local, offset)[0][upper]
+                targets[key] = spec.resolve(root, limb)
+            else:
+                targets[key] = np.asarray(spec, float) * self.height
         if extra_targets:
             targets.update(extra_targets)   # grips win over the authored pose
 
