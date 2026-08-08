@@ -18,6 +18,7 @@ const CAGE_CENTRE = new THREE.Vector3(0, 1.26, 0);   // canvas surface
 const TUNNEL_START = -19.5;
 const STAIR_BOTTOM = -8.3;
 const STAIR_TOP = -5.3;
+const WALK_LEG = 5.2;      // seconds per fighter: tunnel, stairs, corner
 
 const renderer = makeRenderer($('view'));
 const scene = new THREE.Scene();
@@ -208,18 +209,18 @@ function teardown() {
 function updateWalkout(dt) {
   const w = state.walk;
   w.t += dt;
-  const lead = w.t < 7.5 ? state.player : state.enemy;
+  const lead = w.t < WALK_LEG ? state.player : state.enemy;
   const other = lead === state.player ? state.enemy : state.player;
-  const local = w.t < 7.5 ? w.t : w.t - 7.5;
+  const local = w.t < WALK_LEG ? w.t : w.t - WALK_LEG;
 
   const march = (f, t, laneX) => {
-    if (t < 4.2) {
-      const z = TUNNEL_START + t * 2.5;
+    if (t < 2.8) {
+      const z = TUNNEL_START + t * 4.0;
       f.root.position.set(laneX, 0, Math.min(z, STAIR_BOTTOM));
       f.root.rotation.y = 0;
       if (f.state !== 'walkout') { f.state = 'walkout'; f.play('walkout', { fade: 0.3 }); }
-    } else if (t < 7.0) {
-      const u = Math.min((t - 4.2) / 2.4, 1);
+    } else if (t < 4.7) {
+      const u = Math.min((t - 2.8) / 1.9, 1);
       f.root.position.set(laneX * (1 - u), 1.26 * u,
         STAIR_BOTTOM + (STAIR_TOP - STAIR_BOTTOM) * u);
       if (f.state !== 'climb') { f.state = 'climb'; f.play('climb', { fade: 0.3 }); }
@@ -230,7 +231,7 @@ function updateWalkout(dt) {
   };
 
   march(lead, local, lead === state.player ? -1.1 : 1.1);
-  if (w.t >= 7.5) {
+  if (w.t >= WALK_LEG) {
     // The first man is already inside, waiting in his corner.
     other.root.position.set(-1.6, 1.26, -1.9);
     if (other.state !== 'idle') { other.state = 'idle'; other.play('idle', { fade: 0.3 }); }
@@ -240,7 +241,7 @@ function updateWalkout(dt) {
   lead.mixer.update(dt);
   other.mixer.update(dt);
 
-  if (w.t > 14.5) {
+  if (w.t > WALK_LEG * 2) {
     state.player.root.position.set(0, 1.26, -1.7);
     state.enemy.root.position.set(0, 1.26, 1.7);
     state.player.root.rotation.y = 0;

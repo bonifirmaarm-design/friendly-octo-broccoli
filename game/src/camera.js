@@ -72,14 +72,18 @@ export class FightCamera {
   }
 
   walkout(fighter, dt) {
+    // Straight down the tunnel from behind, on its centre line. A lateral
+    // offset puts the camera through the tunnel wall -- it is only 3.2 m wide
+    // -- and the shot fills with the inside of a box.
     const angle = fighter.root.rotation.y;
     const forward = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
     const position = fighter.root.position.clone()
-      .add(forward.clone().multiplyScalar(-3.6))
-      .add(new THREE.Vector3(1.5, 1.85, 0));
+      .add(forward.clone().multiplyScalar(-4.2));
+    position.x *= 0.35;
+    position.y = fighter.root.position.y + 2.15;
     const look = fighter.root.position.clone()
-      .add(forward.clone().multiplyScalar(1.5))
-      .setY(fighter.root.position.y + 1.3);
+      .add(forward.clone().multiplyScalar(2.5))
+      .setY(fighter.root.position.y + 1.25);
     this.follow(position, look, dt, 2.4);
   }
 
