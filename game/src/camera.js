@@ -90,23 +90,34 @@ export class FightCamera {
     this.follow(position, look, dt, 2.2);
   }
 
-  // Between rounds both corners matter at once -- the water, the towel, the
-  // coaches leaning through the fence -- and the two men are sitting on
-  // opposite diagonals six metres apart. Nothing inside the cage is far
-  // enough back to hold both, so the camera goes where the real one goes:
-  // outside, on the empty diagonal, just above the top of the fence.
-  corners(a, b, dt) {
-    const mid = new THREE.Vector3()
-      .addVectors(a.root.position, b.root.position).multiplyScalar(0.5);
-    const away = new THREE.Vector3()
-      .subVectors(b.root.position, a.root.position).normalize();
-    const side = new THREE.Vector3(-away.z, 0, away.x);
-    this.orbit += dt * 0.08;
-    const position = mid.clone()
-      .add(side.multiplyScalar(8.6))
-      .add(away.clone().multiplyScalar(Math.sin(this.orbit) * 1.2));
-    position.y = mid.y + 2.7;
-    this.follow(position, mid.clone().setY(mid.y + 0.9), dt, 1.5);
+  // Between rounds the camera does what the broadcast does: it sits on one
+  // man's face while he drinks and gets wiped down, then cuts to the other
+  // corner and does the same. Framing both at once puts them six metres
+  // apart on opposite diagonals and shows neither -- you cannot see a man
+  // take a bottle from thirty feet.
+  //
+  // `elapsed` runs from the bell; the cut lands at the halfway mark.
+  corners(a, b, elapsed, total, dt) {
+    const half = total / 2;
+    const first = elapsed < half;
+    const subject = first ? a : b;
+    const since = first ? elapsed : elapsed - half;
+
+    // In front of him at head height, easing closer over the beat. The
+    // camera has to stand *inside* the cage: he sits at 3.3 m from the
+    // centre and the fence is at 4.57, so backing away from the middle to
+    // frame him puts the lens outside the mesh and shoots him through the
+    // chain-link.
+    const head = subject.root.position.clone().setY(subject.root.position.y + 1.42);
+    const out = subject.root.position.clone().setY(0).normalize();
+    const push = Math.min(1, since / half);
+    const side = new THREE.Vector3(-out.z, 0, out.x);
+    const position = head.clone()
+      .addScaledVector(out, -(2.1 - push * 0.6))
+      .addScaledVector(side, 0.5 + push * 0.25)
+      .setY(head.y + 0.28);
+    // Snap on the cut so it reads as a new shot rather than a long swoop.
+    this.follow(position, head, dt, since < 0.1 ? 999 : 1.6);
   }
 
   // The ending is a shot, not an orbit. It cuts to a wide from outside the

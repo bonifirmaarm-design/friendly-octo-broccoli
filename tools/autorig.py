@@ -46,9 +46,25 @@ from segment import (adjacency, geodesic, find_extremities, segment,  # noqa: E4
 
 REPO = Path(__file__).resolve().parent.parent
 
-# Where each joint sits along its limb centreline, as a fraction of the
-# distance from the fingertip/toe to where the limb enters the torso.
-ARM_STOPS = {"hand": 0.13, "lower": 0.34, "upper": 0.62, "shoulder": 0.95}
+# Where each joint sits along the arm centreline, which runs from the
+# fingertip to where the arm meets the torso -- about 0.44 of standing height,
+# being hand (0.108 H) plus forearm (0.146 H) plus upper arm (0.186 H). The
+# fractions below are those segment lengths divided by that total.
+#
+# They used to be guesses, and they were out by a whole joint: what the rig
+# called the shoulder sat on the elbow, the elbow sat mid-forearm, and the
+# hand sat inside the fingers. Two consequences, both of which looked like
+# separate bugs. The hand bone owned the far half of the forearm and swung it
+# rigidly about a point in the middle of it, so wrists crumpled into a lump
+# on every clip. And the whole arm measured 0.375 m instead of 0.55, so a
+# punch authored as "reach 95% of arm length" stopped well short of straight
+# -- the fighters looked like they were shadow-boxing at a wall six inches in
+# front of them.
+ARM_STOPS = {"hand": 0.245, "lower": 0.577, "upper": 0.97}
+
+# The clavicle is not on the arm's centreline at all: it runs inboard from the
+# shoulder joint towards the neck. Placed as a fraction of that gap.
+SHOULDER_INSET = 0.55
 
 # Legs and spine are placed by height instead, as fractions of standing
 # height, following ordinary human proportions.
@@ -70,13 +86,31 @@ BONES = [
 # Which segmentation labels a bone is allowed to influence. Without this the
 # nearest-bone search hands chest vertices to the upper-arm bone, because in
 # an A-pose the armpit is physically closer to the arm than to the spine.
+#
+# Both forearms have to accept torso as well, and the reason is a flaw one
+# level down: the min-cut that isolates a limb finds the cheapest cut, and on
+# an arm that is the wrist, not the shoulder. So "arm" comes back as roughly
+# a hand -- 676 vertices against a leg's 1415 -- and everything from the
+# elbow up is labelled torso. The hand bone then took almost all of the arm
+# label and the forearm bone was left with fifty-eight vertices out of
+# twenty-three thousand, which is to say the elbow did not bend at all: the
+# forearm was welded to the upper arm and the hand swung from the wrist.
+# That is what put a flat blade of geometry where each fighter's arm should
+# be. Distance still keeps the forearm bone local -- it sits half a metre
+# from the chest, which has spine bones running through it.
 BONE_PARTS = {
     "Hips": {TORSO}, "Spine": {TORSO}, "Chest": {TORSO},
     "Neck": {TORSO, HEAD}, "Head": {HEAD},
-    "Shoulder_L": {TORSO, ARM_L}, "UpperArm_L": {ARM_L, TORSO},
-    "LowerArm_L": {ARM_L}, "Hand_L": {ARM_L},
-    "Shoulder_R": {TORSO, ARM_R}, "UpperArm_R": {ARM_R, TORSO},
-    "LowerArm_R": {ARM_R}, "Hand_R": {ARM_R},
+    # The clavicles may hold torso only. Once they were placed properly --
+    # running inboard from the shoulder joint toward the neck rather than
+    # sitting on the elbow -- their segment lies right across the deltoid, and
+    # nearest-bone handed them the whole shoulder cap. Nothing in the move
+    # library rotates a clavicle, so that cap then stayed behind while the arm
+    # swung, and the mesh between them stretched into a sheet across the chest.
+    "Shoulder_L": {TORSO}, "UpperArm_L": {ARM_L, TORSO},
+    "LowerArm_L": {ARM_L, TORSO}, "Hand_L": {ARM_L},
+    "Shoulder_R": {TORSO}, "UpperArm_R": {ARM_R, TORSO},
+    "LowerArm_R": {ARM_R, TORSO}, "Hand_R": {ARM_R},
     "UpperLeg_L": {LEG_L, TORSO}, "LowerLeg_L": {LEG_L}, "Foot_L": {LEG_L},
     "UpperLeg_R": {LEG_R, TORSO}, "LowerLeg_R": {LEG_R}, "Foot_R": {LEG_R},
 }
@@ -185,7 +219,6 @@ def build_skeleton(pos, adj, labels, height):
         joints[f"Hand_{prefix}"] = sample_along(line, ARM_STOPS["hand"])
         joints[f"LowerArm_{prefix}"] = sample_along(line, ARM_STOPS["lower"])
         joints[f"UpperArm_{prefix}"] = sample_along(line, ARM_STOPS["upper"])
-        joints[f"Shoulder_{prefix}"] = sample_along(line, ARM_STOPS["shoulder"])
 
     hips_xz = []
     for part, prefix in ((LEG_L, "L"), (LEG_R, "R")):
@@ -206,6 +239,14 @@ def build_skeleton(pos, adj, labels, height):
     depth = float(np.mean([p[2] for p in hips_xz]))
     for name, frac in SPINE_HEIGHTS.items():
         joints[name] = np.array([0.0, frac * height, depth], np.float32)
+
+    # Clavicles last, once the neck exists to aim them at: each one runs from
+    # its shoulder joint inboard toward the base of the neck.
+    for prefix in ("L", "R"):
+        shoulder_joint = joints[f"UpperArm_{prefix}"]
+        joints[f"Shoulder_{prefix}"] = (
+            shoulder_joint + (joints["Neck"] - shoulder_joint) * SHOULDER_INSET
+        ).astype(np.float32)
     return joints
 
 

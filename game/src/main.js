@@ -678,12 +678,13 @@ function updateBreak(dt) {
   const beat = cornerBeat(14 - c.breakClock);
 
   for (const [i, f] of [state.player, state.enemy].entries()) {
-    // Each man goes to his own corner and sits facing outward -- his coach is
-    // on the other side of that fence, and a fighter with his back to his own
-    // corner cannot be handed anything.
+    // He sits facing the middle of the cage, which is where a fighter sits
+    // and where the camera can see his face. His corner is behind him on the
+    // other side of the fence and reaches over his shoulder, which is also
+    // what really happens.
     const angle = CORNER_ANGLE[i];
     f.root.position.set(Math.cos(angle) * 3.3, 1.26, Math.sin(angle) * 3.3);
-    f.root.rotation.y = Math.atan2(f.root.position.x, f.root.position.z);
+    f.root.rotation.y = Math.atan2(-f.root.position.x, -f.root.position.z);
     const clip = f.has(beat.clip) ? beat.clip : 'idle';
     if (f.cornerClip !== clip) { f.cornerClip = clip; f.play(clip, { fade: 0.35 }); }
     f.state = 'corner';
@@ -701,7 +702,7 @@ function updateBreak(dt) {
   // Props last: the hands they hang off have to be posed for this frame first.
   updateCornerProps(beat);
 
-  rig.corners(state.player, state.enemy, dt);
+  rig.corners(state.player, state.enemy, 14 - c.breakClock, 14, dt);
 }
 
 // Where the three of them stand for the announcement. The referee takes the
