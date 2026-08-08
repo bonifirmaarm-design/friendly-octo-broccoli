@@ -47,6 +47,19 @@ export const DEFENCE = {
   weave: { clip: 'weave', hold: 0.30, cost: 7, evade: true },
 };
 
+// Positions rather than motions: these are authored as loops with the first
+// and last keyframe the same, and they are held until something ends them.
+// A submission left on LoopOnce freezes on its last frame, which reads as the
+// hold going slack at exactly the moment it should be at its tightest.
+// The staff clips are the same idea: the referee watches and counts and the
+// coach shouts, holds something out or jumps for as long as the game needs
+// him to, so those loop too. Only his one-shots -- the break, the wave-off,
+// the belt, the raised hand -- play once and stop.
+const HELD = new Set(['ground_top', 'ground_bottom', 'corner_sit', 'hand_raised',
+  'sub_choke', 'sub_choke_victim', 'sub_armbar', 'sub_armbar_victim',
+  'stand', 'ref_watch', 'ref_count',
+  'coach_watch', 'coach_shout', 'coach_hand', 'coach_jump']);
+
 export class Fighter {
   constructor(gltf, profile) {
     this.profile = profile;
@@ -63,7 +76,8 @@ export class Fighter {
     for (const clip of gltf.animations) {
       const action = this.mixer.clipAction(clip);
       const loops = clip.name === 'idle' || clip.name.startsWith('walk')
-        || clip.name === 'climb' || clip.name === 'ground_pound';
+        || clip.name === 'climb' || clip.name === 'ground_pound'
+        || HELD.has(clip.name);
       action.loop = loops ? THREE.LoopRepeat : THREE.LoopOnce;
       action.clampWhenFinished = !loops;
       this.actions.set(clip.name, action);

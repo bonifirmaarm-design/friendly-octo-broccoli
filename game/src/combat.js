@@ -1,5 +1,21 @@
 import { STRIKES, DEFENCE } from './fighter.js';
 
+// Submissions. A hold is not a hit, it is a clock: one man tightens it, the
+// other works to get loose, and whoever runs out first ends the fight. Which
+// hold is on offer depends on who is on top -- you choke a man from above and
+// you take his arm from underneath, which is also why the man on the bottom
+// is not simply losing.
+export const SUBMISSIONS = {
+  sub_choke: {
+    from: 'top', clip: 'sub_choke', victim: 'sub_choke_victim',
+    cost: 18, tighten: 0.19, drain: 5, name: 'удушающий',
+  },
+  sub_armbar: {
+    from: 'bottom', clip: 'sub_armbar', victim: 'sub_armbar_victim',
+    cost: 20, tighten: 0.16, drain: 3, name: 'рычаг локтя',
+  },
+};
+
 // A strike is resolved once, in the middle of its animation, not on the frame
 // the button is pressed. That gap is the whole game: it is what makes a jab
 // beat a hook to the punch, and what gives the defender time to block after
@@ -17,6 +33,7 @@ export class Combat {
     this.phase = 'fight';        // fight | between | over
     this.breakClock = 0;
     this.ground = null;          // { top, bottom, since, lastAction }
+    this.submission = null;      // { kind, by, on, tight, since, lastStruggle }
     this.events = [];            // consumed by the HUD and the camera
     this.winner = null;
   }
@@ -131,7 +148,8 @@ export class Combat {
 
   groundStrike(fighter) {
     const g = this.ground;
-    if (!g || g.top !== fighter || this.time < fighter.busyUntil) return false;
+    if (!g || this.submission) return false;
+    if (g.top !== fighter || this.time < fighter.busyUntil) return false;
     if (fighter.stamina < 5) return false;
     fighter.stamina -= 5;
     fighter.play('ground_pound', { fade: 0.08 });
@@ -153,7 +171,8 @@ export class Combat {
 
   groundEscape(fighter, kind = 'ground_escape') {
     const g = this.ground;
-    if (!g || g.bottom !== fighter || this.time < fighter.busyUntil) return false;
+    if (!g || this.submission) return false;
+    if (g.bottom !== fighter || this.time < fighter.busyUntil) return false;
     const cost = kind === 'ground_sweep' ? 22 : 16;
     if (fighter.stamina < cost) return false;
     fighter.stamina -= cost;
@@ -181,9 +200,87 @@ export class Combat {
     return true;
   }
 
+  attemptSubmission(fighter, kind) {
+    const spec = SUBMISSIONS[kind];
+    const g = this.ground;
+    if (!spec || !g || this.submission) return false;
+    if (this.time < fighter.busyUntil) return false;
+    const side = g.top === fighter ? 'top' : (g.bottom === fighter ? 'bottom' : null);
+    if (side !== spec.from) return false;
+    const victim = side === 'top' ? g.bottom : g.top;
+    if (!fighter.has(spec.clip) || !victim.has(spec.victim)) return false;
+    if (fighter.stamina < spec.cost) return false;
+
+    fighter.stamina -= spec.cost;
+    g.lastAction = this.time;
+    this.submission = {
+      kind, by: fighter, on: victim,
+      tight: 0.14, since: this.time, lastStruggle: 0,
+    };
+    fighter.play(spec.clip, { fade: 0.20 });
+    victim.play(spec.victim, { fade: 0.20 });
+    fighter.state = 'submission';
+    victim.state = 'submitted';
+    fighter.busyUntil = victim.busyUntil = this.time + 0.6;
+    this.emit('submission-start', { by: fighter.profile.id, kind, name: spec.name });
+    return true;
+  }
+
+  // The man in the hold works his way out of it. One press is a hand fighting
+  // for a grip, not an escape, so it takes several and each one costs him --
+  // which is what makes being caught late in a round so much worse.
+  struggle(fighter) {
+    const s = this.submission;
+    if (!s || s.on !== fighter) return false;
+    if (this.time - s.lastStruggle < 0.14) return false;
+    s.lastStruggle = this.time;
+    if (fighter.stamina < 3) return false;
+    fighter.stamina -= 3;
+
+    const mine = fighter.profile.stats.grappling;
+    const theirs = s.by.profile.stats.grappling;
+    s.tight = Math.max(0, s.tight - 0.055 * (0.55 + (mine / theirs) * 0.5));
+    this.emit('struggle', { by: fighter.profile.id, tight: s.tight });
+    if (s.tight <= 0) this.releaseSubmission('вырвался');
+    return true;
+  }
+
+  releaseSubmission(reason) {
+    const s = this.submission;
+    if (!s) return;
+    this.submission = null;
+    if (this.ground) this.ground.lastAction = this.time;
+    for (const f of [s.by, s.on]) f.busyUntil = Math.max(f.busyUntil, this.time + 0.4);
+    this.emit('submission-end', { reason, by: s.by.profile.id, on: s.on.profile.id });
+  }
+
+  updateSubmission(dt) {
+    const s = this.submission;
+    if (!s) return;
+    const spec = SUBMISSIONS[s.kind];
+    const edge = (s.by.profile.stats.grappling - s.on.profile.stats.grappling) / 200;
+    const gassed = 1 + (100 - s.on.stamina) / 150;   // a tired man cannot defend
+    s.tight = Math.min(1, s.tight + spec.tighten * (0.75 + edge) * gassed * dt);
+    s.on.health = Math.max(1, s.on.health - spec.drain * s.tight * dt);
+    // A live submission is the opposite of a stalled position: keep the
+    // referee out of it.
+    this.ground.lastAction = this.time;
+
+    if (s.tight >= 1) {
+      const { by: winner, on: victim } = s;
+      this.submission = null;
+      victim.play('tap_out', { fade: 0.15 });
+      victim.state = 'tapped';
+      victim.busyUntil = this.time + 2.0;
+      this.emit('tap', { by: winner.profile.id, kind: s.kind, name: spec.name });
+      this.finish(winner, victim, `сдача — ${spec.name}`);
+    }
+  }
+
   standUp(reason) {
     const g = this.ground;
     if (!g) return;
+    this.submission = null;
     for (const f of [g.top, g.bottom]) {
       f.grounded = false;
       f.state = 'idle';
@@ -197,6 +294,8 @@ export class Combat {
   updateGround(dt) {
     const g = this.ground;
     if (!g) return;
+    this.updateSubmission(dt);
+    if (this.phase === 'over') return;
     // The referee steps in when the position has gone nowhere. Twelve seconds
     // is short for a real fight and about right for a game.
     if (this.time - g.lastAction > 12) {
@@ -264,11 +363,23 @@ export class Combat {
   stepFighters(dt) {
     for (const f of [this.player, this.bot]) {
       f.update(dt);
+      // Between rounds the corner owns the fighters -- stool, water, towel,
+      // and back to the stool. Falling through to the idle reset below took
+      // the clip back off them every single frame, which is why the drink
+      // and the towel never appeared however long the break ran.
+      if (this.phase === 'between') continue;
       if (this.time < f.busyUntil) continue;
       if (this.ground && (f === this.ground.top || f === this.ground.bottom)) {
         // Hold the position rather than standing him up: on the ground the
         // loop *is* the state, and only an escape, a sweep or the referee
         // ends it.
+        const s = this.submission;
+        if (s) {
+          const spec = SUBMISSIONS[s.kind];
+          f.state = f === s.by ? 'submission' : 'submitted';
+          f.play(f === s.by ? spec.clip : spec.victim, { fade: 0.25, restart: false });
+          continue;
+        }
         const clip = f === this.ground.top ? 'ground_top' : 'ground_bottom';
         f.state = f === this.ground.top ? 'ground-top' : 'ground-bottom';
         f.play(clip, { fade: 0.25, restart: false });
@@ -282,20 +393,42 @@ export class Combat {
     }
     this.player.faceTowards(this.bot, 0.12);
     this.bot.faceTowards(this.player, 0.12);
+    this.holdGround(dt);
     this.separate();
   }
 
+  // Two men on the mat are one shape, not two. Every clip is authored in its
+  // own fighter's space, so nothing in the animation pulls them together --
+  // left alone they play a choke standing the width of the cage apart. The
+  // top man is drawn to a fixed offset from the bottom man instead, closer
+  // still once a hold is on, since a submission has no daylight in it.
+  holdGround(dt) {
+    const g = this.ground;
+    if (!g) return;
+    const gap = this.submission ? 0.58 : 0.86;
+    const a = g.bottom.root.position;
+    const b = g.top.root.position;
+    let dx = b.x - a.x, dz = b.z - a.z;
+    let d = Math.hypot(dx, dz);
+    if (d < 1e-3) { dx = 0; dz = 1; d = 1; }
+    const k = Math.min(1, dt * 6);
+    b.x += (a.x + (dx / d) * gap - b.x) * k;
+    b.z += (a.z + (dz / d) * gap - b.z) * k;
+    b.y = a.y;
+  }
+
   separate() {
-    if (this.ground) return;
     const a = this.player.root.position;
     const b = this.bot.root.position;
-    const dx = b.x - a.x, dz = b.z - a.z;
-    const d = Math.hypot(dx, dz);
-    const minimum = 0.78;
-    if (d > 1e-4 && d < minimum) {
-      const push = (minimum - d) / 2;
-      a.x -= (dx / d) * push; a.z -= (dz / d) * push;
-      b.x += (dx / d) * push; b.z += (dz / d) * push;
+    if (!this.ground) {
+      const dx = b.x - a.x, dz = b.z - a.z;
+      const d = Math.hypot(dx, dz);
+      const minimum = 0.78;
+      if (d > 1e-4 && d < minimum) {
+        const push = (minimum - d) / 2;
+        a.x -= (dx / d) * push; a.z -= (dz / d) * push;
+        b.x += (dx / d) * push; b.z += (dz / d) * push;
+      }
     }
     // Keep both inside the cage: the apothem is 4.57, minus a body's width.
     for (const p of [a, b]) {

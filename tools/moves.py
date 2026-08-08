@@ -321,6 +321,9 @@ FLOOR = -0.42          # how far the hips drop to lie on the mat
 
 def ground_clips(g):
     flat = {"root": (0.0, FLOOR, 0.0)}
+    # Legs out along the mat, for the poses where the fighter is on his back
+    # and the legs are not doing anything in particular.
+    sprawled = {"foot_L": p(0.22, 0.22, 0.24), "foot_R": p(-0.23, 0.20, 0.22)}
 
     def bottom(**over):
         """On his back, hips down, knees up: the guard."""
@@ -375,6 +378,110 @@ def ground_clips(g):
                         hand_L=p(0.32, 0.20, 0.18), hand_R=p(-0.28, 0.26, -0.06))),
             (1.00, top(hips=(0.50, -0.35, 0.0), chest=(0.30, -0.20, 0.0))),
             (1.30, top()),
+        ]),
+        # Submissions. Two bodies again, but they start already tangled on the
+        # mat, so each side is authored on its own rather than solved from a
+        # grip: there is no reaching involved, only squeezing and defending.
+        #
+        # The choke: one arm under the jaw, the other locking it, both legs
+        # wrapped round the waist from behind.
+        "sub_choke": (True, [
+            (0.00, pose(g, hips=(-0.75, 0.10, 0.0), chest=(0.20, 0.10, 0.0),
+                        root=(0.0, FLOOR + 0.10, -0.12),
+                        foot_L=p(0.26, 0.34, 0.34), foot_R=p(-0.26, 0.32, 0.34),
+                        hand_L=Reach((-0.55, 0.10, 0.83), 0.70),
+                        hand_R=Reach((0.62, 0.06, 0.78), 0.66))),
+            (0.85, pose(g, hips=(-0.85, 0.10, 0.0), chest=(0.28, 0.12, 0.0),
+                        head=(-0.16, 0.0, 0.0), root=(0.0, FLOOR + 0.08, -0.14),
+                        foot_L=p(0.24, 0.30, 0.36), foot_R=p(-0.24, 0.28, 0.36),
+                        hand_L=Reach((-0.48, 0.14, 0.86), 0.62),
+                        hand_R=Reach((0.55, 0.10, 0.83), 0.58))),
+            (1.70, pose(g, hips=(-0.75, 0.10, 0.0), chest=(0.20, 0.10, 0.0),
+                        root=(0.0, FLOOR + 0.10, -0.12),
+                        foot_L=p(0.26, 0.34, 0.34), foot_R=p(-0.26, 0.32, 0.34),
+                        hand_L=Reach((-0.55, 0.10, 0.83), 0.70),
+                        hand_R=Reach((0.62, 0.06, 0.78), 0.66))),
+        ]),
+        "sub_choke_victim": (True, [
+            (0.00, pose(g, hips=(-0.60, 0.0, 0.0), chest=(0.34, 0.0, 0.0),
+                        head=(-0.34, 0.0, 0.0), root=(0.0, FLOOR + 0.06, 0.0),
+                        foot_L=p(0.24, 0.14, 0.34), foot_R=p(-0.25, 0.12, 0.32),
+                        hand_L=Reach((-0.30, 0.72, 0.62), 0.66),
+                        hand_R=Reach((0.30, 0.72, 0.62), 0.66))),
+            (0.85, pose(g, hips=(-0.62, 0.10, 0.0), chest=(0.38, 0.08, 0.0),
+                        head=(-0.42, 0.06, 0.0), root=(0.0, FLOOR + 0.05, 0.0),
+                        foot_L=p(0.26, 0.20, 0.30), foot_R=p(-0.27, 0.18, 0.28),
+                        hand_L=Reach((-0.36, 0.66, 0.66), 0.72),
+                        hand_R=Reach((0.24, 0.78, 0.58), 0.60))),
+            (1.70, pose(g, hips=(-0.60, 0.0, 0.0), chest=(0.34, 0.0, 0.0),
+                        head=(-0.34, 0.0, 0.0), root=(0.0, FLOOR + 0.06, 0.0),
+                        foot_L=p(0.24, 0.14, 0.34), foot_R=p(-0.25, 0.12, 0.32),
+                        hand_L=Reach((-0.30, 0.72, 0.62), 0.66),
+                        hand_R=Reach((0.30, 0.72, 0.62), 0.66))),
+        ]),
+        # The armbar: hips up under the elbow, both legs across the chest.
+        "sub_armbar": (True, [
+            (0.00, pose(g, hips=(-1.15, 0.30, 0.0), chest=(0.10, 0.20, 0.0),
+                        root=(0.10, FLOOR + 0.04, 0.06),
+                        foot_L=p(0.16, 0.52, 0.30), foot_R=p(-0.20, 0.50, 0.26),
+                        hand_L=Reach((-0.40, 0.36, 0.84), 0.80),
+                        hand_R=Reach((0.36, 0.40, 0.84), 0.78))),
+            (0.90, pose(g, hips=(-1.28, 0.30, 0.0), chest=(0.02, 0.22, 0.0),
+                        root=(0.10, FLOOR + 0.10, 0.06),
+                        foot_L=p(0.16, 0.56, 0.28), foot_R=p(-0.20, 0.54, 0.24),
+                        hand_L=Reach((-0.34, 0.52, 0.78), 0.90),
+                        hand_R=Reach((0.30, 0.56, 0.77), 0.88))),
+            (1.80, pose(g, hips=(-1.15, 0.30, 0.0), chest=(0.10, 0.20, 0.0),
+                        root=(0.10, FLOOR + 0.04, 0.06),
+                        foot_L=p(0.16, 0.52, 0.30), foot_R=p(-0.20, 0.50, 0.26),
+                        hand_L=Reach((-0.40, 0.36, 0.84), 0.80),
+                        hand_R=Reach((0.36, 0.40, 0.84), 0.78))),
+        ]),
+        "sub_armbar_victim": (True, [
+            (0.00, pose(g, hips=(-1.30, -0.20, 0.0), chest=(0.20, -0.16, 0.0),
+                        head=(0.24, 0.0, 0.0), root=(0.0, FLOOR, 0.0),
+                        foot_L=p(0.22, 0.22, 0.24), foot_R=p(-0.23, 0.20, 0.22),
+                        hand_L=Reach((-0.20, 0.86, 0.46), 0.96),
+                        hand_R=Reach((0.34, 0.30, 0.88), 0.60))),
+            (0.90, pose(g, hips=(-1.34, -0.24, 0.0), chest=(0.26, -0.20, 0.0),
+                        head=(0.30, 0.0, 0.0), root=(0.0, FLOOR, 0.0),
+                        foot_L=p(0.24, 0.28, 0.20), foot_R=p(-0.25, 0.26, 0.18),
+                        hand_L=Reach((-0.16, 0.92, 0.36), 0.98),
+                        hand_R=Reach((0.40, 0.24, 0.88), 0.56))),
+            (1.80, pose(g, hips=(-1.30, -0.20, 0.0), chest=(0.20, -0.16, 0.0),
+                        head=(0.24, 0.0, 0.0), root=(0.0, FLOOR, 0.0),
+                        foot_L=p(0.22, 0.22, 0.24), foot_R=p(-0.23, 0.20, 0.22),
+                        hand_L=Reach((-0.20, 0.86, 0.46), 0.96),
+                        hand_R=Reach((0.34, 0.30, 0.88), 0.60))),
+        ]),
+        # Tapping: the free hand slaps the mat three times, then goes limp.
+        #
+        # The feet have to be named even though the tap is all upper body.
+        # Leave them out and they fall back to the standing guard's targets,
+        # which sit under a fighter whose hips are a metre higher -- the legs
+        # then fold so hard that the knee, not the foot, becomes the lowest
+        # joint and buries itself in the canvas.
+        "tap_out": (False, [
+            (0.00, pose(g, hips=(-1.30, -0.20, 0.0), chest=(0.20, -0.16, 0.0),
+                        root=(0.0, FLOOR, 0.0), **sprawled,
+                        hand_R=Reach((0.40, 0.24, 0.88), 0.56))),
+            (0.22, pose(g, hips=(-1.30, -0.20, 0.0), chest=(0.24, -0.16, 0.0),
+                        root=(0.0, FLOOR, 0.0), **sprawled,
+                        hand_R=Reach((0.52, -0.55, 0.65), 0.86))),
+            (0.44, pose(g, hips=(-1.30, -0.20, 0.0), chest=(0.20, -0.16, 0.0),
+                        root=(0.0, FLOOR, 0.0), **sprawled,
+                        hand_R=Reach((0.40, 0.10, 0.91), 0.62))),
+            (0.66, pose(g, hips=(-1.30, -0.20, 0.0), chest=(0.24, -0.16, 0.0),
+                        root=(0.0, FLOOR, 0.0), **sprawled,
+                        hand_R=Reach((0.52, -0.55, 0.65), 0.86))),
+            (1.10, pose(g, hips=(-1.20, -0.10, 0.0), chest=(0.16, -0.08, 0.0),
+                        root=(0.0, FLOOR, 0.0), head=(0.20, 0.0, 0.0), **sprawled,
+                        hand_L=Reach((-0.55, -0.60, 0.58), 0.90),
+                        hand_R=Reach((0.55, -0.60, 0.58), 0.90))),
+            (2.00, pose(g, hips=(-1.20, -0.10, 0.0), chest=(0.16, -0.08, 0.0),
+                        root=(0.0, FLOOR, 0.0), head=(0.20, 0.0, 0.0), **sprawled,
+                        hand_L=Reach((-0.55, -0.60, 0.58), 0.90),
+                        hand_R=Reach((0.55, -0.60, 0.58), 0.90))),
         ]),
         # The referee waves it off and both men are stood back up.
         "stand_up": (False, [
@@ -445,6 +552,18 @@ def corner_clips(g):
             (4.20, pose(g, hand_L=Reach((-0.34, 0.90, 0.28), 0.92),
                         hand_R=Reach((0.34, 0.90, 0.28), 0.92),
                         chest=(-0.20, 0.0, 0.0), head=(-0.26, 0.0, 0.0))),
+        ]),
+        # The referee has hold of his wrist. Only the one arm goes up, and it
+        # is the right one: the referee stands on the champion's right, and a
+        # winner throwing up the arm on the far side of the man holding it
+        # is the sort of thing you notice immediately and cannot unsee.
+        "hand_raised": (True, [
+            (0.00, pose(g, hand_R=Reach((0.30, 0.92, 0.24), 0.96),
+                        chest=(-0.08, -0.10, 0.0), head=(-0.14, -0.06, 0.0))),
+            (1.40, pose(g, hand_R=Reach((0.26, 0.94, 0.20), 0.97),
+                        chest=(-0.12, -0.10, 0.0), head=(-0.18, -0.06, 0.0))),
+            (2.80, pose(g, hand_R=Reach((0.30, 0.92, 0.24), 0.96),
+                        chest=(-0.08, -0.10, 0.0), head=(-0.14, -0.06, 0.0))),
         ]),
     }
 
@@ -906,6 +1025,59 @@ def staff_clips(role):
                 (4.00, pose(g, hand_L=Reach((0.55, -0.30, 0.78), 0.52),
                             hand_R=Reach((-0.55, -0.30, 0.78), 0.52),
                             chest=(0.06, 0.0, 0.0))),
+            ]),
+            # Passing something through the fence: the arm goes out and stays
+            # out, held at the top, because the fighter has to come and take
+            # it. Both hands are used -- the left steadies him on the mesh --
+            # so whichever prop the game hangs off the right hand reads as
+            # being offered rather than dropped.
+            "coach_hand": (True, [
+                (0.00, pose(g, hand_L=Reach((-0.30, 0.24, 0.92), 0.72),
+                            hand_R=Reach((0.34, -0.10, 0.93), 0.60),
+                            chest=(0.10, -0.06, 0.0), head=(0.08, -0.08, 0.0))),
+                (0.55, pose(g, hand_L=Reach((-0.30, 0.24, 0.92), 0.72),
+                            hand_R=Reach((0.22, 0.16, 0.96), 0.94),
+                            chest=(0.20, -0.10, 0.0), head=(0.12, -0.10, 0.0),
+                            root=(0.0, -0.02, 0.05))),
+                (2.20, pose(g, hand_L=Reach((-0.30, 0.24, 0.92), 0.72),
+                            hand_R=Reach((0.20, 0.18, 0.96), 0.96),
+                            chest=(0.22, -0.10, 0.0), head=(0.14, -0.10, 0.0),
+                            root=(0.0, -0.02, 0.06))),
+                (2.80, pose(g, hand_L=Reach((-0.30, 0.24, 0.92), 0.72),
+                            hand_R=Reach((0.22, 0.16, 0.96), 0.94),
+                            chest=(0.20, -0.10, 0.0), head=(0.12, -0.10, 0.0),
+                            root=(0.0, -0.02, 0.05))),
+            ]),
+            # His man won. Both fists up, and he actually leaves the ground --
+            # a coach who only raises his arms looks like he is stretching.
+            "coach_jump": (True, [
+                (0.00, pose(g, hand_L=Reach((-0.40, 0.30, 0.86), 0.60),
+                            hand_R=Reach((0.40, 0.30, 0.86), 0.60),
+                            hips=(0.0, 0.0, 0.0), root=(0.0, -0.16, 0.0),
+                            foot_L=p(0.14, 0.02, 0.04), foot_R=p(-0.14, 0.02, -0.04))),
+                (0.18, pose(g, hand_L=Reach((-0.34, 0.88, 0.32), 0.96),
+                            hand_R=Reach((0.34, 0.88, 0.32), 0.96),
+                            chest=(-0.14, 0.0, 0.0), head=(-0.20, 0.0, 0.0),
+                            root=(0.0, 0.30, 0.0),
+                            foot_L=p(0.14, -0.10, 0.06), foot_R=p(-0.14, -0.10, -0.06))),
+                (0.46, pose(g, hand_L=Reach((-0.30, 0.94, 0.16), 0.98),
+                            hand_R=Reach((0.30, 0.94, 0.16), 0.98),
+                            chest=(-0.18, 0.0, 0.0), head=(-0.24, 0.0, 0.0),
+                            root=(0.0, 0.46, 0.0),
+                            foot_L=p(0.15, -0.16, 0.02), foot_R=p(-0.15, -0.16, -0.02))),
+                (0.74, pose(g, hand_L=Reach((-0.34, 0.88, 0.32), 0.96),
+                            hand_R=Reach((0.34, 0.88, 0.32), 0.96),
+                            chest=(-0.14, 0.0, 0.0), head=(-0.20, 0.0, 0.0),
+                            root=(0.0, 0.22, 0.0),
+                            foot_L=p(0.14, -0.08, 0.06), foot_R=p(-0.14, -0.08, -0.06))),
+                (0.94, pose(g, hand_L=Reach((-0.40, 0.46, 0.79), 0.72),
+                            hand_R=Reach((0.40, 0.46, 0.79), 0.72),
+                            chest=(0.10, 0.0, 0.0), root=(0.0, -0.22, 0.0),
+                            foot_L=p(0.15, 0.02, 0.04), foot_R=p(-0.15, 0.02, -0.04))),
+                (1.20, pose(g, hand_L=Reach((-0.40, 0.30, 0.86), 0.60),
+                            hand_R=Reach((0.40, 0.30, 0.86), 0.60),
+                            root=(0.0, -0.16, 0.0),
+                            foot_L=p(0.14, 0.02, 0.04), foot_R=p(-0.14, 0.02, -0.04))),
             ]),
         }
 

@@ -34,12 +34,35 @@ export class Bot {
     // bot lie there until the referee stands him up.
     if (c.ground) {
       if (c.time < this.nextDecision) return;
+
+      // Caught in a hold, there is exactly one thing to do, and a bot that
+      // decides at human speed does it at human speed.
+      const held = c.submission;
+      if (held) {
+        if (held.on === me) {
+          c.struggle(me);
+          this.nextDecision = c.time + 0.16 + Math.random() * 0.14;
+        } else {
+          this.nextDecision = c.time + 0.4;
+        }
+        return;
+      }
+
+      const grappling = me.profile.stats.grappling;
       if (c.ground.top === me) {
+        // A grappler goes hunting for the neck; a striker just hits him.
+        if (Math.random() < grappling / 340 && c.attemptSubmission(me, 'sub_choke')) {
+          this.nextDecision = c.time + 1.0;
+          return;
+        }
         c.groundStrike(me);
         this.nextDecision = c.time + 0.5 + Math.random() * 0.5;
       } else if (c.ground.bottom === me) {
-        const wrestler = me.profile.stats.grappling > 80;
-        c.groundEscape(me, wrestler && Math.random() < 0.45
+        if (Math.random() < grappling / 380 && c.attemptSubmission(me, 'sub_armbar')) {
+          this.nextDecision = c.time + 1.0;
+          return;
+        }
+        c.groundEscape(me, grappling > 80 && Math.random() < 0.45
           ? 'ground_sweep' : 'ground_escape');
         this.nextDecision = c.time + 1.4 + Math.random() * 0.8;
       }

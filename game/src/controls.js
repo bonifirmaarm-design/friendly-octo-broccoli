@@ -12,7 +12,7 @@ export const BINDINGS = [
   { code: 'KeyJ', label: 'J', action: 'jab', text: 'Джеб (передняя рука)' },
   { code: 'KeyK', label: 'K', action: 'cross', text: 'Кросс (задняя рука)' },
   { code: 'KeyU', label: 'U', action: 'hook', text: 'Хук' },
-  { code: 'KeyI', label: 'I', action: 'uppercut', text: 'Апперкот' },
+  { code: 'KeyI', label: 'I', action: 'uppercut', text: 'Апперкот; в партере — приём' },
   { code: 'KeyH', label: 'H', action: 'kick_low', text: 'Лоу-кик' },
   { code: 'KeyN', label: 'N', action: 'kick_body', text: 'Кик в корпус' },
   { code: 'KeyM', label: 'M', action: 'kick_high', text: 'Хай-кик' },
@@ -23,6 +23,7 @@ export const BINDINGS = [
   { code: 'KeyE', label: 'E', action: 'dodge_right', text: 'Уход вправо' },
   { code: 'KeyC', label: 'C', action: 'weave', text: 'Нырок' },
   { code: 'KeyR', label: 'R', action: 'camera', text: 'Сменить камеру' },
+  { code: 'KeyO', label: 'O', action: 'sound', text: 'Звук вкл / выкл' },
   { code: 'Escape', label: 'Esc', action: 'pause', text: 'Пауза / меню' },
 ];
 

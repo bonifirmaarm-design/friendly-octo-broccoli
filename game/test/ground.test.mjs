@@ -6,7 +6,9 @@ import { Combat } from '../src/combat.js';
 
 const clips = new Set(['idle', 'ground_top', 'ground_bottom', 'ground_pound',
   'ground_escape', 'ground_sweep', 'stand_up', 'knockdown', 'get_up',
-  'block_high', 'hit_head', 'hit_body', 'jab', 'takedown_double_leg']);
+  'block_high', 'hit_head', 'hit_body', 'jab', 'takedown_double_leg',
+  'sub_choke', 'sub_choke_victim', 'sub_armbar', 'sub_armbar_victim',
+  'tap_out']);
 
 function stub(id, stats) {
   return {
@@ -141,6 +143,87 @@ const check = (name, ok, extra = '') => {
   c.toGround(a, b);
   c.update(1.2);
   check('гонг поднимает из партера', !c.ground && c.phase === 'between');
+}
+
+// --- submissions ----------------------------------------------------------
+{
+  const a = stub('top', { power: 80, chin: 85, grappling: 92 });
+  const b = stub('bottom', { power: 80, chin: 85, grappling: 70 });
+  const c = new Combat(a, b);
+  c.toGround(a, b);
+  c.time = 1.0;
+  check('снизу душить нельзя', c.attemptSubmission(b, 'sub_choke') === false);
+  check('сверху рычаг нельзя', c.attemptSubmission(a, 'sub_armbar') === false);
+  check('сверху душит', c.attemptSubmission(a, 'sub_choke') === true);
+  check('второй приём поверх первого не встаёт',
+    c.attemptSubmission(a, 'sub_choke') === false);
+  check('в приёме нельзя бить', c.groundStrike(a) === false);
+  check('в приёме нельзя вставать', c.groundEscape(b) === false);
+}
+
+// --- a hold left alone finishes the fight ---------------------------------
+{
+  const a = stub('top', { power: 80, chin: 85, grappling: 92 });
+  const b = stub('bottom', { power: 80, chin: 85, grappling: 70 });
+  const c = new Combat(a, b);
+  c.toGround(a, b);
+  c.time = 1.0;
+  c.attemptSubmission(a, 'sub_choke');
+  for (let i = 0; i < 900 && c.phase !== 'over'; i++) { c.time += 0.016; c.updateGround(0.016); }
+  check('без защиты доходит до сдачи', c.phase === 'over' && c.winner === a,
+    `${(c.time - 1).toFixed(1)} с`);
+  check('сдача не считается нокаутом', b.health > 0);
+  check('победа отмечена сдачей', /сдача/.test(
+    c.events.find((e) => e.type === 'finish')?.how || ''));
+  check('проигравший тапает', b.played.includes('tap_out'));
+}
+
+// --- and mashing gets you out of it ---------------------------------------
+{
+  const a = stub('top', { power: 80, chin: 85, grappling: 88 });
+  const b = stub('bottom', { power: 80, chin: 85, grappling: 88 });
+  const c = new Combat(a, b);
+  c.toGround(a, b);
+  c.time = 1.0;
+  c.attemptSubmission(a, 'sub_choke');
+  for (let i = 0; i < 900 && c.submission && c.phase !== 'over'; i++) {
+    c.time += 0.016;
+    c.updateGround(0.016);
+    c.struggle(b);
+  }
+  check('защита вырывает из приёма', !c.submission && c.phase !== 'over');
+  check('партер при этом остаётся', !!c.ground);
+  check('рывки стоят стамины', b.stamina < 100, `${b.stamina.toFixed(0)}`);
+}
+
+// --- a live hold is not a stalled position --------------------------------
+{
+  const a = stub('top', { power: 80, chin: 85, grappling: 92 });
+  const b = stub('bottom', { power: 80, chin: 85, grappling: 99 });
+  const c = new Combat(a, b);
+  c.toGround(a, b);
+  c.time = 1.0;
+  c.attemptSubmission(a, 'sub_choke');
+  for (let i = 0; i < 800 && c.phase !== 'over'; i++) {
+    c.time += 0.016;
+    c.updateGround(0.016);
+    c.struggle(b);
+    if (!c.submission) break;
+  }
+  check('судья не разнимает во время приёма',
+    !c.events.some((e) => e.type === 'referee-break'));
+}
+
+// --- the bell releases a hold ---------------------------------------------
+{
+  const a = stub('top', { power: 80, chin: 85, grappling: 92 });
+  const b = stub('bottom', { power: 80, chin: 85, grappling: 70 });
+  const c = new Combat(a, b, { rounds: 3, roundLength: 1 });
+  c.toGround(a, b);
+  c.time = 0.5;
+  c.attemptSubmission(a, 'sub_choke');
+  c.update(1.2);
+  check('гонг снимает приём', !c.submission && c.phase === 'between');
 }
 
 console.log(failures ? `\n${failures} провалов` : '\nвсе проверки прошли');

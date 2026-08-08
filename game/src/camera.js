@@ -90,6 +90,25 @@ export class FightCamera {
     this.follow(position, look, dt, 2.2);
   }
 
+  // Between rounds both corners matter at once -- the water, the towel, the
+  // coaches leaning through the fence -- and the two men are sitting on
+  // opposite diagonals six metres apart. Nothing inside the cage is far
+  // enough back to hold both, so the camera goes where the real one goes:
+  // outside, on the empty diagonal, just above the top of the fence.
+  corners(a, b, dt) {
+    const mid = new THREE.Vector3()
+      .addVectors(a.root.position, b.root.position).multiplyScalar(0.5);
+    const away = new THREE.Vector3()
+      .subVectors(b.root.position, a.root.position).normalize();
+    const side = new THREE.Vector3(-away.z, 0, away.x);
+    this.orbit += dt * 0.08;
+    const position = mid.clone()
+      .add(side.multiplyScalar(8.6))
+      .add(away.clone().multiplyScalar(Math.sin(this.orbit) * 1.2));
+    position.y = mid.y + 2.7;
+    this.follow(position, mid.clone().setY(mid.y + 0.9), dt, 1.5);
+  }
+
   ceremony(centre, dt) {
     this.orbit += dt * 0.22;
     const position = new THREE.Vector3(

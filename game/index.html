@@ -84,6 +84,17 @@
     font-size: 44px; font-weight: 800; letter-spacing: .1em; opacity: 0;
     transition: opacity .25s; text-shadow: 0 4px 30px #000; }
   .toast.on { opacity: 1; }
+  /* Submission grip meter: only up while a hold is on. */
+  .grip { position: absolute; left: 50%; transform: translateX(-50%); bottom: 76px;
+    width: min(400px, 62vw); display: none; text-align: center; }
+  .grip.on { display: block; }
+  .grip b { font-size: 12px; letter-spacing: .22em; color: var(--gold); }
+  .gripbar { height: 9px; margin: 6px 0 5px; background: #191d28;
+    border: 1px solid var(--line); border-radius: 3px; overflow: hidden; }
+  .gripbar i { display: block; height: 100%; width: 0;
+    background: linear-gradient(90deg,#3a7,#7d5); transition: width .08s linear; }
+  .grip.theirs .gripbar i { background: linear-gradient(90deg,#c33,#e85); }
+  .grip span { font-size: 12px; letter-spacing: .1em; color: var(--dim); }
   .hint { position: absolute; bottom: 18px; left: 0; right: 0; text-align: center;
     color: var(--dim); font-size: 12px; letter-spacing: .08em; }
   #loading { position: absolute; inset: 0; display: grid; place-items: center;
@@ -129,11 +140,16 @@
         <h2>В партере</h2>
         <table>
           <tr><td><kbd>J</kbd></td><td>Сверху: бить</td></tr>
+          <tr><td><kbd>I</kbd></td><td>Сверху: удушающий. Снизу: рычаг локтя</td></tr>
           <tr><td><kbd>G</kbd></td><td>Снизу: вставать</td></tr>
           <tr><td><kbd>U</kbd></td><td>Снизу: переворот</td></tr>
+          <tr><td><kbd>Space</kbd></td><td>В приёме: вырываться, жать часто</td></tr>
         </table>
         <p class="note">Если внизу ничего не происходит 12 секунд, судья
           поднимает обоих в стойку.</p>
+        <p class="note">Приём — это не удар, а таймер. Полоска снизу растёт,
+          пока держат, и падает от каждого нажатия. Дошла до конца — сдача.
+          Каждый рывок стоит стамины, поэтому уставшего дожимают быстрее.</p>
 
         <h2>macOS</h2><table id="mac-table"></table>
         <h2>Как это работает</h2>
@@ -202,6 +218,11 @@
         <div class="hp"><i id="hp-r" style="width:100%"></i></div>
         <div class="sta"><i id="st-r" style="width:100%"></i></div>
       </div>
+    </div>
+    <div class="grip" id="grip">
+      <b id="grip-name">—</b>
+      <div class="gripbar"><i id="grip-fill"></i></div>
+      <span id="grip-tip"></span>
     </div>
     <div class="toast" id="toast"></div>
     <div class="hint" id="hint"></div>
