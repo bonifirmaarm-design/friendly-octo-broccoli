@@ -802,6 +802,9 @@ function frame() {
   window.__phase = state.phase;   // read by the automated playthrough
   window.__walk = state.walk;
   window.__game = state;   // the automated check drives this directly
+  window.__cam = camera;
+  window.__scene = scene;
+  window.__rig = rig;
   input.endFrame();
   renderer.render(scene, camera);
 }

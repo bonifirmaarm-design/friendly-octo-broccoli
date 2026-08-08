@@ -89,7 +89,15 @@ def load_obj(path):
         if line.startswith("v "):
             verts.append([float(x) for x in line.split()[1:4]])
         elif line.startswith("vt "):
-            uvs.append([float(x) for x in line.split()[1:3]])
+            # OBJ puts the texture origin at the bottom-left, glTF at the
+            # top-left, so V has to be flipped on the way in. Without this the
+            # atlas lands upside down: not obviously mirrored, because a body
+            # atlas is not symmetric, but smeared into patches of shorts
+            # across the chest and skin where the shorts should be. It reads
+            # as "the model has no texture" rather than as a flip, which is
+            # what made it survive this long.
+            u, v = (float(x) for x in line.split()[1:3])
+            uvs.append([u, 1.0 - v])
         elif line.startswith("f "):
             corners = [c.split("/") for c in line.split()[1:4]]
             faces.append([int(c[0]) - 1 for c in corners])
