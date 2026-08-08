@@ -89,7 +89,7 @@ def strike(limb, windup, impact, *, base=None, load=None, fire=None,
     return False, frames
 
 
-def walk_cycle(g, stride, period, lift, swagger=False):
+def walk_cycle(g, stride, period, lift, swagger=False, lean=0.0):
     """Four-contact walk, in place: contact, pass, contact, pass.
 
     The hips drop on each plant and rise as the leg straightens, and the
@@ -110,8 +110,8 @@ def walk_cycle(g, stride, period, lift, swagger=False):
         return (t, pose(g, foot_L=foot(base_x_l, l_z, l_y),
                         foot_R=foot(base_x_r, r_z, r_y),
                         root=(0.0, g["root"][1] - drop, 0.0),
-                        hips=(0.0, g["hips"][1] + roll * 0.10, 0.0),
-                        chest=(0.0, g["chest"][1] - roll * 0.16, 0.0),
+                        hips=(lean * 0.5, g["hips"][1] + roll * 0.10, 0.0),
+                        chest=(lean, g["chest"][1] - roll * 0.16, 0.0),
                         head=(0.0, g["head"][1] * (0.4 if swagger else 1.0), 0.0),
                         **hands))
 
@@ -148,6 +148,10 @@ def base_clips(stance=None):
         "walk": (True, walk_cycle(g, stride=0.20, period=1.00, lift=0.10)),
         "walkout": (True, walk_cycle(g, stride=0.24, period=1.30, lift=0.12,
                                      swagger=True)),
+        # Nobody walks into a cage on the flat: the platform is over a metre
+        # up and you climb to it. Short stride, high knee, weight forward.
+        "climb": (True, walk_cycle(g, stride=0.13, period=1.15, lift=0.26,
+                                   lean=0.22)),
         "step_in": (False, [
             (0.00, pose(g)),
             (0.18, pose(g, root=(0.0, 0.01, 0.10), foot_L=g["foot_L"] + p(0, 0.06, 0.10))),
