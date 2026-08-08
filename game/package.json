@@ -1,0 +1,13 @@
+{
+  "name": "mma-local",
+  "version": "0.1.0",
+  "private": true,
+  "description": "MMA game on the octagon: three.js, plain ES modules, no build step",
+  "type": "module",
+  "scripts": {
+    "start": "cd .. && python3 -m http.server 8000",
+    "assets": "cd .. && python3 tools/build_arena.py && python3 tools/populate.py && python3 tools/stl_to_glb.py --scales && python3 tools/autorig.py && python3 tools/animate.py"
+  },
+  "comment": "three.js is vendored into vendor/ on purpose -- the game runs with no network and no install step. package.json is here for the scripts.",
+  "license": "UNLICENSED"
+}

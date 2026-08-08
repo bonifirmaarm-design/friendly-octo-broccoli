@@ -1,5 +1,6 @@
-# Derived meshes produced by tools/stl_to_glb.py (~18 MB, rebuildable)
+# Derived meshes, rigs and animations (rebuildable, ~90 MB)
 build/
 
+node_modules/
 __pycache__/
 *.pyc

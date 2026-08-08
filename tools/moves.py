@@ -89,7 +89,7 @@ def strike(limb, windup, impact, *, base=None, load=None, fire=None,
     return False, frames
 
 
-def walk_cycle(g, stride, period, lift, swagger=False, lean=0.0):
+def walk_cycle(g, stride, period, lift, swagger=False, lean=0.0, arm_lift=0.0):
     """Four-contact walk, in place: contact, pass, contact, pass.
 
     The hips drop on each plant and rise as the leg straightens, and the
@@ -103,10 +103,17 @@ def walk_cycle(g, stride, period, lift, swagger=False, lean=0.0):
         return p(x, ground if y is None else y, z)
 
     def frame(t, l_z, r_z, l_y, r_y, drop, roll, arms):
-        hands = {}
-        if swagger:
-            hands = {"hand_L": g["hand_L"].at(0.42 + arms * 0.06),
-                     "hand_R": g["hand_R"].at(0.42 - arms * 0.06)}
+        # Arms hang and swing opposite the legs. Walking with the fists still
+        # up at the chin is a guard, not a walk -- it is the single thing that
+        # gives away a fighter who is "walking" by sliding a fighting stance
+        # forward. The swing is small: it is a walkout, not a march.
+        swing = arms * (0.30 if swagger else 0.34)
+        drop_frac = (0.80 if swagger else 0.86) - arm_lift * 0.5
+        rise = -0.94 + arm_lift          # climbing brings the hands up a little
+        hands = {
+            "hand_L": Reach((-0.16, rise, -swing + arm_lift), drop_frac),
+            "hand_R": Reach((0.16, rise, swing + arm_lift), drop_frac),
+        }
         return (t, pose(g, foot_L=foot(base_x_l, l_z, l_y),
                         foot_R=foot(base_x_r, r_z, r_y),
                         root=(0.0, g["root"][1] - drop, 0.0),
@@ -151,7 +158,7 @@ def base_clips(stance=None):
         # Nobody walks into a cage on the flat: the platform is over a metre
         # up and you climb to it. Short stride, high knee, weight forward.
         "climb": (True, walk_cycle(g, stride=0.13, period=1.15, lift=0.26,
-                                   lean=0.22)),
+                                   lean=0.22, arm_lift=0.22)),
         "step_in": (False, [
             (0.00, pose(g)),
             (0.18, pose(g, root=(0.0, 0.01, 0.10), foot_L=g["foot_L"] + p(0, 0.06, 0.10))),
