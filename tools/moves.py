@@ -89,6 +89,42 @@ def strike(limb, windup, impact, *, base=None, load=None, fire=None,
     return False, frames
 
 
+def walk_cycle(g, stride, period, lift, swagger=False):
+    """Four-contact walk, in place: contact, pass, contact, pass.
+
+    The hips drop on each plant and rise as the leg straightens, and the
+    shoulders counter-rotate against them -- without that the figure glides
+    along level, which reads as sliding rather than walking.
+    """
+    base_x_l, base_x_r = g["foot_L"][0], g["foot_R"][0]
+    ground = g["foot_L"][1]
+
+    def foot(x, z, y=None):
+        return p(x, ground if y is None else y, z)
+
+    def frame(t, l_z, r_z, l_y, r_y, drop, roll, arms):
+        hands = {}
+        if swagger:
+            hands = {"hand_L": g["hand_L"].at(0.42 + arms * 0.06),
+                     "hand_R": g["hand_R"].at(0.42 - arms * 0.06)}
+        return (t, pose(g, foot_L=foot(base_x_l, l_z, l_y),
+                        foot_R=foot(base_x_r, r_z, r_y),
+                        root=(0.0, g["root"][1] - drop, 0.0),
+                        hips=(0.0, g["hips"][1] + roll * 0.10, 0.0),
+                        chest=(0.0, g["chest"][1] - roll * 0.16, 0.0),
+                        head=(0.0, g["head"][1] * (0.4 if swagger else 1.0), 0.0),
+                        **hands))
+
+    half, quarter = period / 2, period / 4
+    return [
+        frame(0.0, stride, -stride, None, None, 0.02, 1.0, 1.0),
+        frame(quarter, 0.0, 0.0, None, ground + lift, 0.0, 0.0, 0.0),
+        frame(half, -stride, stride, None, None, 0.02, -1.0, -1.0),
+        frame(3 * quarter, 0.0, 0.0, ground + lift, None, 0.0, 0.0, 0.0),
+        frame(period, stride, -stride, None, None, 0.02, 1.0, 1.0),
+    ]
+
+
 # ---------------------------------------------------------------------------
 # Shared clips every fighter gets
 # ---------------------------------------------------------------------------
@@ -105,6 +141,13 @@ def base_clips(stance=None):
                         chest=(0.0, -0.12 * turn, 0.02))),
             (1.80, pose(g)),
         ]),
+        # Walk cycles are authored in place: the feet slide back under a body
+        # that never moves. Baking forward travel into a looping clip makes
+        # the fighter teleport back to the start of the tunnel every cycle,
+        # so the walk stays still and the scene drives him forward.
+        "walk": (True, walk_cycle(g, stride=0.20, period=1.00, lift=0.10)),
+        "walkout": (True, walk_cycle(g, stride=0.24, period=1.30, lift=0.12,
+                                     swagger=True)),
         "step_in": (False, [
             (0.00, pose(g)),
             (0.18, pose(g, root=(0.0, 0.01, 0.10), foot_L=g["foot_L"] + p(0, 0.06, 0.10))),
