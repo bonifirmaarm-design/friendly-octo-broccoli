@@ -561,6 +561,7 @@ function frame() {
 
   window.__phase = state.phase;   // read by the automated playthrough
   window.__walk = state.walk;
+  window.__game = state;   // the automated check drives this directly
   input.endFrame();
   renderer.render(scene, camera);
 }
