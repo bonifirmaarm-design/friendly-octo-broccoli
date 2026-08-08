@@ -21,14 +21,15 @@ export function lightArena(scene) {
   scene.fog = new THREE.Fog(0x05060a, 34, 95);
 
   // three.js is physically correct since r155: spot intensity is candela and
-  // illuminance falls as I/d². A key 15 m above the canvas therefore wants
-  // roughly 0.8·π·15²/albedo ≈ 1000, and the first pass at 900 was close to
-  // right -- what was actually dark was the tunnel, which had no lamp at all.
-  // Raising every light instead blew the whole arena to white.
-  scene.add(new THREE.HemisphereLight(0x44557a, 0x0d0f16, 0.35));
-  scene.add(new THREE.AmbientLight(0x2a3244, 0.25));
+  // illuminance falls as I/d². Every lamp below is therefore sized from its
+  // own throw, I = E·d² with E ≈ 3.6 for a mid-grey surface -- which is why
+  // the key at 15 m wants ~800 while the little lamp two metres off the
+  // stairs wants ~20. Guessing one number for all of them is what produced
+  // first a black arena and then a white one.
+  scene.add(new THREE.HemisphereLight(0x44557a, 0x0d0f16, 0.22));
+  scene.add(new THREE.AmbientLight(0x2a3244, 0.14));
 
-  const key = new THREE.SpotLight(0xfff3e0, 1150, 46, Math.PI / 4.4, 0.5, 1.15);
+  const key = new THREE.SpotLight(0xfff3e0, 820, 46, Math.PI / 4.4, 0.5, 1.15);   // d≈15 m
   key.position.set(0, 15, 0);
   key.target.position.set(0, 1.2, 0);
   key.castShadow = true;
@@ -39,7 +40,7 @@ export function lightArena(scene) {
   scene.add(key, key.target);
 
   for (const [x, z, colour] of [[8, 8, 0xbcd2ff], [-8, -8, 0xffd9b0]]) {
-    const rake = new THREE.SpotLight(colour, 520, 50, Math.PI / 5, 0.65, 1.25);
+    const rake = new THREE.SpotLight(colour, 300, 50, Math.PI / 5, 0.65, 1.25);   // d≈14 m
     rake.position.set(x, 11, z);
     rake.target.position.set(0, 1.4, 0);
     scene.add(rake, rake.target);
@@ -47,12 +48,12 @@ export function lightArena(scene) {
 
   // The tunnel gets its own light, otherwise the walkout happens in the dark:
   // every other lamp is aimed at the cage.
-  const tunnel = new THREE.SpotLight(0xcfd8ee, 420, 30, Math.PI / 3.4, 0.7, 1.2);
+  const tunnel = new THREE.SpotLight(0xcfd8ee, 190, 30, Math.PI / 3.4, 0.7, 1.2);   // d≈7 m
   tunnel.position.set(0, 4.2, -16);
   tunnel.target.position.set(0, 0.8, -9);
   scene.add(tunnel, tunnel.target);
 
-  const ramp = new THREE.PointLight(0xffe6c4, 130, 18, 1.2);
+  const ramp = new THREE.PointLight(0xffe6c4, 22, 18, 1.2);   // d≈2.5 m
   ramp.position.set(0, 3.4, -7.4);
   scene.add(ramp);
   return key;
