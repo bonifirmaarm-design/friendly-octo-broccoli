@@ -6,7 +6,8 @@ import { Combat } from '../src/combat.js';
 
 const clips = new Set(['idle', 'ground_top', 'ground_bottom', 'ground_pound',
   'ground_escape', 'ground_sweep', 'stand_up', 'knockdown', 'get_up',
-  'block_high', 'hit_head', 'hit_body', 'jab', 'takedown_double_leg',
+  'block_high', 'hit_head', 'hit_body', 'jab', 'cross', 'hook_L',
+  'takedown_double_leg',
   'sub_choke', 'sub_choke_victim', 'sub_armbar', 'sub_armbar_victim',
   'tap_out']);
 
@@ -18,6 +19,7 @@ function stub(id, stats) {
       copy() {}, lerp() {} }, rotation: { y: 0 } },
     health: 100, stamina: 100, state: 'idle', busyUntil: 0, pending: null,
     guardUntil: 0, evadeUntil: 0, grounded: false, knockdowns: 0,
+    parts: { head: 100, leg: 100 },
     played: [],
     has(n) { return clips.has(n); },
     play(n) { this.played.push(n); },
@@ -224,6 +226,35 @@ const check = (name, ok, extra = '') => {
   c.attemptSubmission(a, 'sub_choke');
   c.update(1.2);
   check('гонг снимает приём', !c.submission && c.phase === 'between');
+}
+
+// --- a signature combo has to actually hurt -------------------------------
+{
+  const a = stub('conor', { power: 96, chin: 74, grappling: 62 });
+  const b = stub('foe', { power: 80, chin: 85, grappling: 80 });
+  a.profile.combo = 'combo_left_hand';        // jab, cross, hook_L
+  clips.add('combo_left_hand');
+  const c = new Combat(a, b);
+  check('связка запускается', c.combo(a, b) === true);
+  check('связка ставит такты', c.queued.length === 3, `${c.queued.length}`);
+  const cost = 100 - a.stamina;
+  check('связка стоит стамины', cost > 10, `${cost.toFixed(0)}`);
+  for (let i = 0; i < 200 && c.queued.length; i++) c.update(0.016);
+  check('все удары связки прошли', b.health < 80, `урон ${(100 - b.health).toFixed(1)}`);
+  check('такты израсходованы', c.queued.length === 0);
+}
+
+// --- and a takedown mid-combo must not keep punching a man on the floor ---
+{
+  const a = stub('islam', { power: 82, chin: 86, grappling: 90 });
+  const b = stub('foe', { power: 80, chin: 85, grappling: 70 });
+  a.profile.combo = 'combo_grind';            // jab, cross, trip_throw
+  clips.add('combo_grind'); clips.add('trip_throw');
+  const c = new Combat(a, b);
+  c.combo(a, b);
+  for (let i = 0; i < 300 && !c.ground; i++) c.update(0.016);
+  check('связка доводит до перевода', !!c.ground);
+  check('после перевода тактов не осталось', c.queued.length === 0);
 }
 
 console.log(failures ? `\n${failures} провалов` : '\nвсе проверки прошли');

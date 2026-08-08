@@ -109,12 +109,24 @@ export class FightCamera {
     this.follow(position, mid.clone().setY(mid.y + 0.9), dt, 1.5);
   }
 
-  ceremony(centre, dt) {
-    this.orbit += dt * 0.22;
+  // The ending is a shot, not an orbit. It cuts to a wide from outside the
+  // cage while the three of them find their marks, then pushes in on a
+  // straight line to a chest-height two-shot for the belt and the raised
+  // arm. Circling them the whole time gave the moment nowhere to go.
+  ceremony(centre, elapsed, dt) {
+    const push = Math.min(1, Math.max(0, (elapsed - 2.6) / 6.0));
+    const eased = push * push * (3 - 2 * push);        // ease in and out
+    const distance = 7.4 - eased * 4.5;
+    const height = 3.0 - eased * 1.05;
+
+    // The cut: for the first beat the camera is not where it was during the
+    // fight, it is somewhere new, and it stays on that axis all the way in.
     const position = new THREE.Vector3(
-      centre.x + Math.cos(this.orbit) * 4.4,
-      centre.y + 2.2,
-      centre.z + Math.sin(this.orbit) * 4.4);
-    this.follow(position, centre.clone().setY(centre.y + 1.2), dt, 2.0);
+      centre.x + Math.sin(-0.34) * distance,
+      centre.y + height,
+      centre.z - Math.cos(-0.34) * distance);
+    const look = centre.clone().setY(centre.y + 1.15 + eased * 0.15);
+    // Snap on the first frame so it reads as a cut; glide from then on.
+    this.follow(position, look, dt, elapsed < 0.08 ? 999 : 1.9);
   }
 }

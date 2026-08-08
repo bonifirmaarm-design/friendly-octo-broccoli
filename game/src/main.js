@@ -241,6 +241,8 @@ function startMatch() {
 
   state.combat = new Combat(state.player, state.enemy);
   state.bot = new Bot(state.enemy, state.player, state.combat, 0.55);
+  $('dots').innerHTML = Array.from({ length: state.combat.rounds },
+    (_, i) => `<i class="${i === 0 ? 'on' : ''}"></i>`).join('');
   state.walk = { t: 0, stage: 0 };
   state.phase = 'walkout';
   show(null);
@@ -309,8 +311,11 @@ function updateWalkout(dt) {
   other.mixer.update(dt);
 
   if (w.t > WALK_LEG * 2) {
-    state.player.root.position.set(0, 1.26, -1.7);
-    state.enemy.root.position.set(0, 1.26, 1.7);
+    // Close enough that the first punch can land. At the old 3.4 m every
+    // strike in the game fell short of the man opposite, so the opening
+    // exchange was a row of silent whiffs.
+    state.player.root.position.set(0, 1.26, -1.05);
+    state.enemy.root.position.set(0, 1.26, 1.05);
     state.player.root.rotation.y = 0;
     state.enemy.root.rotation.y = Math.PI;
     state.phase = 'fight';
@@ -324,6 +329,17 @@ function updateWalkout(dt) {
 // ---------------------------------------------------------------------------
 // Input
 // ---------------------------------------------------------------------------
+
+const KEY_SLOTS = {
+  KeyJ: 'jab', KeyK: 'cross', KeyU: 'hook', KeyI: 'uppercut',
+  KeyH: 'kick_low', KeyN: 'kick_body', KeyM: 'kick_high', KeyG: 'takedown',
+};
+
+const SLOT_NAMES = {
+  jab: 'Джеб', cross: 'Кросс', hook: 'Хук', uppercut: 'Апперкот',
+  kick_low: 'Лоу-кик', kick_body: 'Кик в корпус', kick_high: 'Хай-кик',
+  takedown: 'Проход в ноги',
+};
 
 function playerActions(dt) {
   const c = state.combat, me = state.player;
@@ -367,29 +383,18 @@ function playerActions(dt) {
   if (moving && me.state === 'idle') { me.state = 'walking'; me.play('walk', { fade: 0.2, restart: false }); }
   if (!moving && me.state === 'walking') { me.state = 'idle'; me.play('idle', { fade: 0.2 }); }
 
-  const lead = me.profile.stance === 'southpaw' ? 'hand_R' : 'hand_L';
-  const map = {
-    KeyJ: 'jab', KeyK: 'cross',
-    KeyU: lead === 'hand_L' ? 'hook_L' : 'hook_R',
-    KeyI: lead === 'hand_L' ? 'uppercut_R' : 'uppercut_L',
-    KeyH: 'kick_low', KeyN: 'kick_body', KeyM: 'kick_high',
-  };
-  for (const [code, move] of Object.entries(map)) {
-    if (input.tapped(code)) { c.attack(me, state.enemy, move); return; }
-  }
-  if (input.tapped('KeyG')) {
-    const shot = ['takedown_double_leg', 'takedown_single_leg', 'body_lock_throw',
-      'trip_throw'].find((m) => me.has(m));
-    if (shot) c.attack(me, state.enemy, shot);
+  // Keys name a slot, not a move: fighter.pick() finds the nearest thing this
+  // man actually owns, so no key is ever dead.
+  for (const [code, slot] of Object.entries(KEY_SLOTS)) {
+    if (!input.tapped(code)) continue;
+    const move = me.pick(slot);
+    if (!move) { hint(`${SLOT_NAMES[slot]}: у этого бойца такого удара нет`); return; }
+    if (!c.attack(me, state.enemy, move)) {
+      if (me.stamina < (STRIKES[move]?.cost ?? 0)) hint('Стамина кончилась');
+    }
     return;
   }
-  if (input.tapped('KeyL') && me.has(me.profile.combo)) {
-    me.play(me.profile.combo, { fade: 0.1 });
-    me.state = 'attack';
-    me.busyUntil = c.time + me.clipLength(me.profile.combo);
-    me.stamina = Math.max(0, me.stamina - 22);
-    return;
-  }
+  if (input.tapped('KeyL')) { c.combo(me, state.enemy); return; }
   if (input.tapped('KeyQ')) return void c.defend(me, 'dodge_left');
   if (input.tapped('KeyE')) return void c.defend(me, 'dodge_right');
   if (input.tapped('KeyC')) return void c.defend(me, 'weave');
@@ -478,8 +483,17 @@ function updateHud(dt) {
   $('hp-r').style.width = `${e.health}%`;
   $('st-l').style.width = `${p.stamina}%`;
   $('st-r').style.width = `${e.stamina}%`;
-  $('h-l').textContent = Math.round(p.health);
-  $('h-r').textContent = Math.round(e.health);
+
+  // Body damage, shown only once there is some: a row of full bars on every
+  // fighter at all times is noise.
+  for (const [prefix, fighter] of [['pl', p], ['pr', e]]) {
+    for (const [key, part] of [['head', 'head'], ['leg', 'leg']]) {
+      const row = $(`${prefix}-${key}`);
+      const value = fighter.parts[part];
+      row.classList.toggle('on', value < 92);
+      row.querySelector('u').style.width = `${value}%`;
+    }
+  }
   const clock = Math.max(0, c.phase === 'between' ? c.breakClock : c.roundClock);
   $('clock').textContent =
     `${Math.floor(clock / 60)}:${String(Math.floor(clock % 60)).padStart(2, '0')}`;
@@ -529,6 +543,16 @@ function drainEvents() {
       }
     }
     if (ev.type === 'blocked') sound.block();
+    // A strike that falls short used to produce nothing at all -- no sound, no
+    // message, the fighter just swung at air. From the player's seat that is
+    // indistinguishable from the button not working, which is exactly how it
+    // was reported.
+    if (ev.type === 'miss' && ev.by === state.player.profile.id) {
+      sound.whoosh();
+      if (ev.reason === 'range') hint('Далеко — подойди ближе на W');
+    }
+    if (ev.type === 'evaded' && ev.by !== state.player.profile.id) sound.whoosh();
+    if (ev.type === 'combo-start') toast('СЕРИЯ', 1.0);
     if (ev.type === 'takedown') {
       rig.kick(0.6);
       sound.thud();
@@ -560,7 +584,11 @@ function drainEvents() {
     if (ev.type === 'round-end') {
       toast('КОНЕЦ РАУНДА', 2); hint('Перерыв: угол, вода, полотенце'); sound.bell(1);
     }
-    if (ev.type === 'round-start') { toast(`РАУНД ${ev.round}`, 1.6); hint(''); sound.bell(1); }
+    if (ev.type === 'round-start') {
+      toast(`РАУНД ${ev.round}`, 1.6); hint(''); sound.bell(1);
+      $('dots').querySelectorAll('i')
+        .forEach((dot, i) => dot.classList.toggle('on', i < ev.round));
+    }
     if (ev.type === 'finish') {
       state.flashes?.burst(c.time, 26);
       sound.bell(3);
@@ -676,25 +704,68 @@ function updateBreak(dt) {
   rig.corners(state.player, state.enemy, dt);
 }
 
+// Where the three of them stand for the announcement. The referee takes the
+// middle of the cage facing the main camera, the champion on his right where
+// the raised arm will read, the beaten man on his left. Real cards do it this
+// way for the same reason: one frame has to hold all three.
+const CEREMONY_SPOT = {
+  referee: new THREE.Vector3(0, 1.26, 0.2),
+  winner: new THREE.Vector3(-0.82, 1.26, 0.1),
+  loser: new THREE.Vector3(0.86, 1.26, 0.1),
+};
+
+function walkTo(person, target, dt, speed = 1.9, face = null) {
+  const p = person.root.position;
+  const dx = target.x - p.x, dz = target.z - p.z;
+  const d = Math.hypot(dx, dz);
+  if (d > 0.06) {
+    const step = Math.min(d, speed * dt);
+    p.x += (dx / d) * step;
+    p.z += (dz / d) * step;
+    p.y = target.y;
+    person.root.rotation.y = Math.atan2(dx, dz);
+    return false;
+  }
+  p.y = target.y;
+  if (face !== null) {
+    let delta = face - person.root.rotation.y;
+    while (delta > Math.PI) delta -= Math.PI * 2;
+    while (delta < -Math.PI) delta += Math.PI * 2;
+    person.root.rotation.y += delta * Math.min(1, dt * 4);
+  }
+  return true;
+}
+
 function updateCeremony(dt) {
   state.ceremonyClock += dt;
   const winner = state.combat.winner;
   const loser = state.combat.loser;
+  const t = state.ceremonyClock;
 
-  // The referee runs the whole ending: waves it off, fetches the belt,
-  // fastens it and lifts the winner's hand. Same order as a real card.
+  // Everyone walks to their mark first. Teleporting them there is what made
+  // the ending feel like a cut-scene stitched onto the fight rather than the
+  // end of it.
+  const facing = Math.PI;                       // out towards the main camera
+  const walking = t < 3.2;
+  if (walking) {
+    walkTo(winner, CEREMONY_SPOT.winner, dt, 1.7, facing);
+    if (loser && !loser.grounded) walkTo(loser, CEREMONY_SPOT.loser, dt, 1.5, facing);
+  } else {
+    winner.root.position.copy(CEREMONY_SPOT.winner);
+    winner.root.rotation.y = facing;
+    if (loser && !loser.grounded) {
+      loser.root.position.copy(CEREMONY_SPOT.loser);
+      loser.root.rotation.y = facing;
+    }
+  }
+
+  // The referee runs the whole ending: waves it off, walks to the middle,
+  // fastens the belt and lifts the winner's hand. Same order as a real card.
   const referee = state.cast.referee;
   if (referee) {
     referee.mixer.update(dt);
-    const beside = winner.root.position.clone()
-      .add(new THREE.Vector3(0.78, 0, 0.42));
-    referee.root.position.lerp(beside, Math.min(1, dt * 1.6));
-    referee.root.rotation.y = Math.atan2(
-      winner.root.position.x - referee.root.position.x,
-      winner.root.position.z - referee.root.position.z);
-
-    const t = state.ceremonyClock;
-    const clip = t < 1.8 ? 'ref_wave_off' : (t < 6.4 ? 'ref_belt' : 'ref_raise_hand');
+    walkTo(referee, CEREMONY_SPOT.referee, dt, 2.0, facing);
+    const clip = t < 1.8 ? 'ref_wave_off' : (t < 7.0 ? 'ref_belt' : 'ref_raise_hand');
     if (referee.state !== clip) { referee.state = clip; referee.play(clip, { fade: 0.3 }); }
   }
   // His man just won. One coach comes off the floor; the other keeps his
@@ -708,24 +779,28 @@ function updateCeremony(dt) {
   });
 
   const belt = state.cast.belt;
-  if (belt && state.ceremonyClock > 1.8) {
+  if (belt && t > 3.2) {
     belt.visible = true;
-    if (state.ceremonyClock < 3.4 && referee) {
+    if (t < 5.0 && referee) {
       // Carried over in the referee's hand, so it arrives rather than
       // materialising round the champion's waist.
       carry(belt, referee, 'Hand_R');
     } else {
-      // Round the waist: the belt model is a metre long, so it sits at hip
-      // height and turns with him.
+      // Round the waist and turning with him, and it settles into place over
+      // half a second rather than snapping there the frame the referee lets
+      // go -- that snap was the whole reason it read as "a belt in the air".
+      const settle = Math.min(1, (t - 5.0) / 0.6);
       belt.quaternion.set(0, 0, 0, 1);
-      belt.position.set(winner.root.position.x, winner.root.position.y + 0.95,
-        winner.root.position.z);
+      belt.position.lerp(new THREE.Vector3(
+        winner.root.position.x,
+        winner.root.position.y + 1.30 - 0.35 * settle,
+        winner.root.position.z), Math.min(1, dt * 6));
       belt.rotation.y = winner.root.rotation.y;
     }
   }
 
   // Arms out for the belt, then the one arm the referee is holding.
-  const stage = state.ceremonyClock < 6.4 ? 'belt_receive' : 'hand_raised';
+  const stage = t < 3.2 ? 'idle' : (t < 7.0 ? 'belt_receive' : 'hand_raised');
   const clip = winner.has(stage) ? stage : (winner.has('walkoff') ? 'walkoff' : 'idle');
   if (winner.state !== clip) {
     winner.state = clip;
@@ -736,9 +811,9 @@ function updateCeremony(dt) {
   }
   winner.mixer.update(dt);
   loser?.mixer.update(dt);
-  rig.ceremony(winner.root.position.clone().setY(winner.root.position.y + 0.4), dt);
+  rig.ceremony(CEREMONY_SPOT.referee, t, dt);
 
-  if (state.ceremonyClock > 11) {
+  if (state.ceremonyClock > 12.5) {
     const same = winner === state.player;
     $('result-title').textContent = same ? 'ПОБЕДА' : 'ПОРАЖЕНИЕ';
     $('result-sub').textContent = same

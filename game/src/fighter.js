@@ -39,6 +39,52 @@ export const STRIKES = {
   ground_pound: { window: [0.10, 0.20], damage: 7, cost: 5, reach: 1.30, recover: 0.24 },
 };
 
+// What each signature combination is made of, in order. Kept in step with
+// the `combos` tables in tools/moves.py, which is what the clips were baked
+// from -- the game needs the move list to know what damage to queue, and the
+// clip alone cannot tell it.
+export const COMBOS = {
+  combo_chain_wrestle: ['jab', 'overhand_R', 'level_change'],
+  combo_smash: ['cross', 'knee', 'takedown_double_leg'],
+  combo_ground_and_pound: ['takedown_double_leg', 'ground_pound'],
+  combo_range: ['oblique_kick', 'jab', 'side_kick'],
+  combo_elbows: ['jab', 'elbow', 'spinning_elbow'],
+  combo_grind: ['jab', 'cross', 'trip_throw'],
+  combo_strike_takedown: ['kick_low', 'cross', 'takedown_double_leg'],
+  combo_left_hand: ['jab', 'cross', 'hook_L'],
+  combo_switch: ['teep', 'cross', 'spinning_back_kick'],
+};
+
+// What each key means, per fighter.
+//
+// Nobody owns every strike: Conor has no wrestling at all, Khabib has no head
+// kick, Jones has no uppercut. A key wired straight to one move therefore
+// does nothing at all for some of the roster -- silently, with no animation
+// and no sound, which does not read as "this fighter cannot do that" but as
+// "this game is broken". So a key names a slot, and the slot lists what to
+// try in order until it finds something the man actually has.
+const SLOT_ORTHODOX = {
+  jab: ['jab', 'cross'],
+  cross: ['cross', 'overhand_R', 'jab'],
+  hook: ['hook_L', 'hook_R', 'body_hook', 'overhand_R', 'elbow'],
+  uppercut: ['uppercut_R', 'uppercut_L', 'elbow', 'knee', 'hook_R', 'hook_L'],
+  kick_low: ['kick_low', 'oblique_kick', 'teep', 'front_kick', 'kick_body'],
+  kick_body: ['kick_body', 'front_kick', 'teep', 'side_kick', 'knee', 'kick_low'],
+  kick_high: ['kick_high', 'spinning_back_kick', 'side_kick', 'kick_body', 'knee'],
+  takedown: ['takedown_double_leg', 'takedown_single_leg', 'body_lock_throw',
+    'trip_throw', 'level_change', 'knee'],
+};
+
+// A southpaw leads with the other hand, so the pairs swap. Everything else is
+// the same list.
+const SLOT_SOUTHPAW = {
+  ...SLOT_ORTHODOX,
+  hook: ['hook_R', 'hook_L', 'body_hook', 'overhand_R', 'elbow'],
+  uppercut: ['uppercut_L', 'uppercut_R', 'elbow', 'knee', 'hook_L', 'hook_R'],
+};
+
+export const SLOTS = Object.keys(SLOT_ORTHODOX);
+
 export const DEFENCE = {
   block_high: { clip: 'block_high', hold: 0.34, cost: 2 },
   block_body: { clip: 'block_body', hold: 0.34, cost: 2 },
@@ -93,9 +139,20 @@ export class Fighter {
     this.evadeUntil = 0;
     this.grounded = false;
     this.knockdowns = 0;
+    // Damage per target, shown on the HUD the way a broadcast shows it: a
+    // man whose lead leg is gone is a different problem from one whose head
+    // is gone, and the health bar alone cannot say which.
+    this.parts = { head: 100, leg: 100 };
   }
 
   has(name) { return this.actions.has(name); }
+
+  // The move this fighter throws for a given key. Null only if he has nothing
+  // in that family at all, which the caller can then say out loud.
+  pick(slot) {
+    const table = this.profile.stance === 'southpaw' ? SLOT_SOUTHPAW : SLOT_ORTHODOX;
+    return (table[slot] || []).find((n) => this.has(n) && STRIKES[n]) || null;
+  }
 
   play(name, { fade = 0.18, restart = true } = {}) {
     const action = this.actions.get(name);

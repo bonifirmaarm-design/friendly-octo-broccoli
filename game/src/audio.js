@@ -124,6 +124,11 @@ export class Audio {
       decay: 0.16 + heavy * 0.08, filter: 1500, sweep: 0.2 });
   }
 
+  whoosh() {   // a strike through empty air
+    this.burst({ tone: 220, noiseGain: 0.16, toneGain: 0.02, decay: 0.19,
+      filter: 900, sweep: 2.6 });
+  }
+
   block() {
     this.burst({ tone: 320, noiseGain: 0.30, toneGain: 0.10, decay: 0.07,
       filter: 4200, sweep: 0.5 });

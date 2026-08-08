@@ -1,4 +1,4 @@
-import { STRIKES, DEFENCE } from './fighter.js';
+import { STRIKES, DEFENCE, COMBOS } from './fighter.js';
 
 // Submissions. A hold is not a hit, it is a clock: one man tightens it, the
 // other works to get loose, and whoever runs out first ends the fight. Which
@@ -34,6 +34,7 @@ export class Combat {
     this.breakClock = 0;
     this.ground = null;          // { top, bottom, since, lastAction }
     this.submission = null;      // { kind, by, on, tight, since, lastStruggle }
+    this.queued = [];            // combo beats still to resolve
     this.events = [];            // consumed by the HUD and the camera
     this.winner = null;
   }
@@ -55,6 +56,37 @@ export class Combat {
       resolveAt: this.time + (spec.window[0] + spec.window[1]) / 2,
     };
     this.emit('strike-start', { by: attacker.profile.id, move });
+    return true;
+  }
+
+  // A signature combination. It used to be played as an animation and nothing
+  // else -- the man threw three punches and the other one stood there at full
+  // health -- because nothing ever queued the damage. Each strike in the
+  // sequence now resolves on its own beat, spaced across the clip, so the
+  // combo is worth more than its parts and costs more than one of them.
+  combo(attacker, defender) {
+    const name = attacker.profile.combo;
+    const order = COMBOS[name];
+    if (!order || !attacker.has(name)) return false;
+    if (this.time < attacker.busyUntil || attacker.grounded) return false;
+    const usable = order.filter((m) => STRIKES[m] && attacker.has(m));
+    if (!usable.length) return false;
+    const cost = usable.reduce((sum, m) => sum + STRIKES[m].cost, 0) * 0.8;
+    if (attacker.stamina < cost) return false;
+
+    attacker.stamina -= cost;
+    attacker.state = 'attack';
+    attacker.play(name, { fade: 0.10 });
+    const length = attacker.clipLength(name) || usable.length * 0.45;
+    attacker.busyUntil = this.time + length;
+    // Spread the beats across the clip rather than reading each strike's own
+    // window: the clips are spliced, so a move's timing inside a combo is not
+    // the timing it has on its own.
+    this.queued = usable.map((move, i) => ({
+      attacker, defender, move,
+      at: this.time + length * (i + 0.55) / usable.length,
+    }));
+    this.emit('combo-start', { by: attacker.profile.id, combo: name, moves: usable });
     return true;
   }
 
@@ -99,6 +131,8 @@ export class Combat {
     if (blocking) damage *= 0.22;
 
     defender.health = Math.max(0, defender.health - damage);
+    const part = (move === 'kick_low' || move === 'oblique_kick') ? 'leg' : 'head';
+    defender.parts[part] = Math.max(0, defender.parts[part] - damage * 0.85);
 
     if (spec.takedown && !blocking) {
       this.toGround(attacker, defender);
@@ -137,6 +171,7 @@ export class Combat {
 
   toGround(top, bottom) {
     this.ground = { top, bottom, since: this.time, lastAction: this.time };
+    this.queued = [];
     for (const f of [top, bottom]) { f.grounded = true; f.pending = null; }
     top.play('ground_top', { fade: 0.15 });
     bottom.play('ground_bottom', { fade: 0.15 });
@@ -281,6 +316,7 @@ export class Combat {
     const g = this.ground;
     if (!g) return;
     this.submission = null;
+    this.queued = [];
     for (const f of [g.top, g.bottom]) {
       f.grounded = false;
       f.state = 'idle';
@@ -324,6 +360,8 @@ export class Combat {
         for (const f of [this.player, this.bot]) {
           f.stamina = Math.min(100, f.stamina + 45);
           f.health = Math.min(100, f.health + 6);
+          f.parts.head = Math.min(100, f.parts.head + 22);
+          f.parts.leg = Math.min(100, f.parts.leg + 16);
           f.grounded = false;
           f.state = 'idle';
         }
@@ -343,6 +381,7 @@ export class Combat {
         if (this.ground) this.standUp('конец раунда');
         this.phase = 'between';
         this.breakClock = 14;
+        this.queued = [];
         this.emit('round-end', { round: this.round });
       }
       return;
@@ -355,6 +394,14 @@ export class Combat {
       if (pending && this.time >= pending.resolveAt) {
         attacker.pending = null;
         this.resolve(attacker, pending.defender, pending.move);
+      }
+    }
+    if (this.queued.length) {
+      const due = this.queued.filter((b) => this.time >= b.at);
+      this.queued = this.queued.filter((b) => this.time < b.at);
+      for (const beat of due) {
+        if (this.phase !== 'fight' || this.ground) break;
+        this.resolve(beat.attacker, beat.defender, beat.move);
       }
     }
     this.stepFighters(dt);

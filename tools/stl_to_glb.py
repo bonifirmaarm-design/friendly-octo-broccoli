@@ -74,6 +74,38 @@ def weld(tri, up_axis_swap=True, scale=1.0):
     return positions.astype(np.float32), normals.astype(np.float32), indices
 
 
+# These meshes come from STL, which carries no UVs and no materials, so every
+# one of them used to export with the same flat 0.8 grey. That is fine for a
+# mesh you are about to rig and texture, and ruinous for the two dozen that go
+# straight into the scene: the whole cageside -- camera crews, press row, the
+# belt, the towel, the water -- rendered as identical white plastic dummies.
+#
+# A base colour per role is not a texture, but it is the difference between a
+# lit arena and a shelf of mannequins. Longest prefix wins.
+TINTS = {
+    "npc_cameraman": ((0.09, 0.10, 0.12), 0.85, 0.0),
+    "npc_commentator": ((0.13, 0.14, 0.19), 0.80, 0.0),
+    "npc_interviewer": ((0.16, 0.18, 0.24), 0.80, 0.0),
+    "npc_official": ((0.10, 0.11, 0.14), 0.80, 0.0),
+    "npc_suit_bald": ((0.11, 0.12, 0.16), 0.75, 0.0),
+    "npc_suit_haired": ((0.15, 0.14, 0.17), 0.75, 0.0),
+    "npc_suit": ((0.12, 0.13, 0.17), 0.75, 0.0),
+    "prop_championship_belt": ((0.62, 0.48, 0.16), 0.28, 0.85),
+    "prop_folded_towel": ((0.86, 0.87, 0.90), 0.95, 0.0),
+    "prop_water_bottle": ((0.42, 0.66, 0.86), 0.20, 0.0),
+    "prop_round_tub": ((0.14, 0.15, 0.18), 0.70, 0.0),
+    "apparel": ((0.18, 0.20, 0.26), 0.85, 0.0),
+    "fighter": ((0.72, 0.56, 0.46), 0.80, 0.0),
+    "mannequin": ((0.66, 0.66, 0.70), 0.85, 0.0),
+}
+
+
+def tint_for(name):
+    key = max((k for k in TINTS if name.startswith(k)), key=len, default=None)
+    colour, roughness, metallic = TINTS.get(key, ((0.8, 0.8, 0.8), 0.8, 0.0))
+    return list(colour) + [1.0], roughness, metallic
+
+
 def write_glb(path, positions, normals, indices, name):
     def pad(buf, fill=b"\x00"):
         return buf + fill * (-len(buf) % 4)
@@ -83,6 +115,7 @@ def write_glb(path, positions, normals, indices, name):
     nrm_bytes = pad(normals.tobytes())
     blob = idx_bytes + pos_bytes + nrm_bytes
 
+    base_colour, roughness, metallic = tint_for(name)
     gltf = {
         "asset": {"version": "2.0", "generator": "stl_to_glb.py"},
         "scene": 0,
@@ -97,11 +130,11 @@ def write_glb(path, positions, normals, indices, name):
             }],
         }],
         "materials": [{
-            "name": "placeholder",
+            "name": name,
             "pbrMetallicRoughness": {
-                "baseColorFactor": [0.8, 0.8, 0.8, 1.0],
-                "metallicFactor": 0.0,
-                "roughnessFactor": 0.8,
+                "baseColorFactor": base_colour,
+                "metallicFactor": metallic,
+                "roughnessFactor": roughness,
             },
         }],
         "buffers": [{"byteLength": len(blob)}],
