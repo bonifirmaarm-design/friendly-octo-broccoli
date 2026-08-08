@@ -12,7 +12,7 @@ export function makeRenderer(canvas) {
   renderer.shadowMap.enabled = true;
   renderer.shadowMap.type = THREE.PCFSoftShadowMap;
   renderer.toneMapping = THREE.ACESFilmicToneMapping;
-  renderer.toneMappingExposure = 1.15;
+  renderer.toneMappingExposure = 1.0;
   return renderer;
 }
 
@@ -20,14 +20,15 @@ export function lightArena(scene) {
   scene.background = new THREE.Color(0x05060a);
   scene.fog = new THREE.Fog(0x05060a, 34, 95);
 
-  // three.js is physically correct since r155: spot and point intensity is in
-  // candela and falls off with the square of distance. A light 15 m up needs
-  // intensity in the thousands, not the hundreds -- at 900 the cage reads as
-  // an unlit silhouette.
-  scene.add(new THREE.HemisphereLight(0x44557a, 0x0d0f16, 1.1));
-  scene.add(new THREE.AmbientLight(0x2a3244, 0.9));
+  // three.js is physically correct since r155: spot intensity is candela and
+  // illuminance falls as I/d². A key 15 m above the canvas therefore wants
+  // roughly 0.8·π·15²/albedo ≈ 1000, and the first pass at 900 was close to
+  // right -- what was actually dark was the tunnel, which had no lamp at all.
+  // Raising every light instead blew the whole arena to white.
+  scene.add(new THREE.HemisphereLight(0x44557a, 0x0d0f16, 0.35));
+  scene.add(new THREE.AmbientLight(0x2a3244, 0.25));
 
-  const key = new THREE.SpotLight(0xfff3e0, 5200, 46, Math.PI / 4.4, 0.5, 1.15);
+  const key = new THREE.SpotLight(0xfff3e0, 1150, 46, Math.PI / 4.4, 0.5, 1.15);
   key.position.set(0, 15, 0);
   key.target.position.set(0, 1.2, 0);
   key.castShadow = true;
@@ -38,7 +39,7 @@ export function lightArena(scene) {
   scene.add(key, key.target);
 
   for (const [x, z, colour] of [[8, 8, 0xbcd2ff], [-8, -8, 0xffd9b0]]) {
-    const rake = new THREE.SpotLight(colour, 2400, 50, Math.PI / 5, 0.65, 1.25);
+    const rake = new THREE.SpotLight(colour, 520, 50, Math.PI / 5, 0.65, 1.25);
     rake.position.set(x, 11, z);
     rake.target.position.set(0, 1.4, 0);
     scene.add(rake, rake.target);
@@ -46,12 +47,12 @@ export function lightArena(scene) {
 
   // The tunnel gets its own light, otherwise the walkout happens in the dark:
   // every other lamp is aimed at the cage.
-  const tunnel = new THREE.SpotLight(0xcfd8ee, 2600, 30, Math.PI / 3.4, 0.7, 1.2);
+  const tunnel = new THREE.SpotLight(0xcfd8ee, 420, 30, Math.PI / 3.4, 0.7, 1.2);
   tunnel.position.set(0, 4.2, -16);
   tunnel.target.position.set(0, 0.8, -9);
   scene.add(tunnel, tunnel.target);
 
-  const ramp = new THREE.PointLight(0xffe6c4, 900, 18, 1.2);
+  const ramp = new THREE.PointLight(0xffe6c4, 130, 18, 1.2);
   ramp.position.set(0, 3.4, -7.4);
   scene.add(ramp);
   return key;

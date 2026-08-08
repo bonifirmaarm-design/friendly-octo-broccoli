@@ -71,20 +71,23 @@ export class FightCamera {
     this.follow(position, look, dt);
   }
 
+  // Two vantages, chosen by where the fighter is rather than by offsetting
+  // from him. Trailing the fighter down the tunnel puts the camera past the
+  // tunnel's far end and inside its walls -- the box is 3.2 m wide and 14 m
+  // long, so there is simply nowhere behind him to stand.
   walkout(fighter, dt) {
-    // Straight down the tunnel from behind, on its centre line. A lateral
-    // offset puts the camera through the tunnel wall -- it is only 3.2 m wide
-    // -- and the shot fills with the inside of a box.
-    const angle = fighter.root.rotation.y;
-    const forward = new THREE.Vector3(Math.sin(angle), 0, Math.cos(angle));
-    const position = fighter.root.position.clone()
-      .add(forward.clone().multiplyScalar(-4.2));
-    position.x *= 0.35;
-    position.y = fighter.root.position.y + 2.15;
-    const look = fighter.root.position.clone()
-      .add(forward.clone().multiplyScalar(2.5))
-      .setY(fighter.root.position.y + 1.25);
-    this.follow(position, look, dt, 2.4);
+    const p = fighter.root.position;
+    let position, look;
+    if (p.z < -9.5) {
+      // Still inside: watch from outside the mouth, looking in.
+      position = new THREE.Vector3(6.4, 3.3, -12.0);
+      look = p.clone().setY(p.y + 1.1);
+    } else {
+      // Out on the floor and climbing: swing round to the side of the stairs.
+      position = new THREE.Vector3(6.0, p.y + 2.6, p.z - 3.2);
+      look = p.clone().setY(p.y + 1.15);
+    }
+    this.follow(position, look, dt, 2.2);
   }
 
   ceremony(centre, dt) {

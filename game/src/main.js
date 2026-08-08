@@ -453,6 +453,7 @@ function frame() {
   }
 
   window.__phase = state.phase;   // read by the automated playthrough
+  window.__walk = state.walk;
   input.endFrame();
   renderer.render(scene, camera);
 }
