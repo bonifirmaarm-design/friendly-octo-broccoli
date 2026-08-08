@@ -193,15 +193,16 @@ def cageside():
         people.append({"role": "cameraman", "model": model,
                        "flash": True, **at(angle, ring + 0.5)})
 
-    # The referee works inside the cage.
-    people.append({"role": "referee", "model": "npc_official_jacket",
+    # The referee works inside the cage. He is rigged, so the game loads him
+    # from build/animated by role rather than from this model name.
+    people.append({"role": "referee", "model": "official_referee",
                    **at(np.pi * 0.75, CIRCUMRADIUS * 0.55, y=deck + 0.04)})
 
     # A corner each, at the fence, below the deck: this is where the coach
     # stands and shouts through the round.
-    people.append({"role": "coach", "corner": "blue", "model": "npc_interviewer_tracksuit",
+    people.append({"role": "coach", "corner": "blue", "model": "official_coach",
                    **at(np.pi * 0.25, ring)})
-    people.append({"role": "coach", "corner": "red", "model": "npc_suit_bald_a",
+    people.append({"role": "coach", "corner": "red", "model": "official_coach",
                    **at(np.pi * 1.25, ring)})
 
     # Commentary and press, further out, facing the cage.

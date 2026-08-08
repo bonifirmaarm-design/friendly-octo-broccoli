@@ -241,6 +241,15 @@ def bake(gltf, blob, tracks, index_of, hips_rest, loops):
     return gltf, blob
 
 
+def build_staff_tracks(rig, key):
+    """The referee and the corner coach: no strikes, no takedowns."""
+    spec = moves.STAFF[key]
+    clips = moves.staff_clips(spec["role"])
+    tracks = {name: solve_clip(rig, frames) for name, (_, frames) in clips.items()}
+    loops = {name: loop for name, (loop, _) in clips.items()}
+    return tracks, loops, spec
+
+
 def build_tracks(rig, fighter_key):
     clips, spec, stance, _ = moves.moveset(fighter_key)
     tracks, loops = {}, {}
@@ -277,6 +286,9 @@ def main():
     args = ap.parse_args()
 
     if args.list:
+        for key, spec in moves.STAFF.items():
+            print(f"\n{spec['name']}  ({key})")
+            print(f"  {', '.join(sorted(moves.staff_clips(spec['role'])))}")
         for key, spec in moves.FIGHTERS.items():
             clips, _, _, _ = moves.moveset(key)
             print(f"\n{spec['name']}  ({key}, {spec['stance']})")
@@ -293,7 +305,7 @@ def main():
     args.out.mkdir(parents=True, exist_ok=True)
 
     for src in sources:
-        if src.stem not in moves.FIGHTERS:
+        if src.stem not in moves.FIGHTERS and src.stem not in moves.STAFF:
             print(f"{src.stem:22} SKIPPED -- no moveset defined")
             continue
         gltf, blob = read_glb(src)
@@ -302,16 +314,22 @@ def main():
         hips_rest = np.array(gltf["nodes"][index_of["Hips"]].get("translation", [0, 0, 0]),
                              float)
 
-        tracks, loops, spec = build_tracks(rig, src.stem)
+        tracks, loops, spec = (build_staff_tracks(rig, src.stem)
+                               if src.stem in moves.STAFF
+                               else build_tracks(rig, src.stem))
         gltf, blob = bake(gltf, blob, tracks, index_of, hips_rest, loops)
 
         dst = args.out / src.name
         write_glb(dst, gltf, blob)
-        attacks = sum(1 for n in tracks if not n.endswith("_victim")
-                      and n not in ("idle", "block", "slip", "hit_head", "hit_body",
-                                    "knockdown", "get_up", "step_in"))
-        print(f"{spec['name']:8} {src.stem:20} {len(tracks):2d} clips "
-              f"({attacks} атак)  {dst.stat().st_size / 1e6:5.2f} MB")
+        if src.stem in moves.STAFF:
+            print(f"{spec['name']:8} {src.stem:20} {len(tracks):2d} clips "
+                  f"           {dst.stat().st_size / 1e6:5.2f} MB")
+        else:
+            attacks = sum(1 for n in tracks if not n.endswith("_victim")
+                          and n not in ("idle", "block", "slip", "hit_head", "hit_body",
+                                        "knockdown", "get_up", "step_in"))
+            print(f"{spec['name']:8} {src.stem:20} {len(tracks):2d} clips "
+                  f"({attacks} атак)  {dst.stat().st_size / 1e6:5.2f} MB")
 
 
 if __name__ == "__main__":

@@ -127,6 +127,19 @@ async function boot() {
   camera.lookAt(CAGE_CENTRE);
 }
 
+// The referee and the corner coaches are rigged now, so they load like a
+// fighter -- mesh plus mixer plus clips -- rather than as scenery. Everyone
+// else cageside is still a static prop, which is all they need to be.
+const STAFF = { referee: 'official_referee', coach: 'official_coach' };
+
+function makeStaff(gltf, role) {
+  const s = new Fighter({ scene: gltf.scene, animations: gltf.animations },
+    { id: role, stats: {}, style: {} });
+  s.root.scale.setScalar(1);
+  scene.add(s.root);
+  return s;
+}
+
 async function placeCageside() {
   let manifest;
   try {
@@ -135,6 +148,24 @@ async function placeCageside() {
 
   const flashPoints = [];
   for (const entry of [...manifest.cageside, ...manifest.props]) {
+    const staffModel = STAFF[entry.role];
+    if (staffModel) {
+      try {
+        const gltf = await load(`${ASSETS}/animated/${staffModel}.glb`);
+        const person = makeStaff(gltf, entry.role);
+        person.root.position.set(...entry.position);
+        person.root.rotation.y = entry.yaw;
+        person.play(entry.role === 'referee' ? 'ref_watch' : 'coach_watch',
+          { fade: 0 });
+        if (entry.role === 'referee') {
+          state.cast.referee = person;
+          state.refHome = person.root.position.clone();
+        } else {
+          (state.cast.coaches ||= []).push(person);
+        }
+        continue;
+      } catch (e) { console.warn('нет модели', staffModel, e.message); }
+    }
     if (entry.model) {
       try {
         const gltf = await load(`${ASSETS}/glb/${entry.model}.glb`);
@@ -145,8 +176,6 @@ async function placeCageside() {
         scene.add(node);
         // The referee walks in, the coaches get shown during the walkout and
         // the belt is handed over at the end, so keep hold of them.
-        if (entry.role === 'referee') { state.cast.referee = node; state.refHome = node.position.clone(); }
-        if (entry.role === 'coach') { (state.cast.coaches ||= []).push(node); }
         if (entry.role === 'belt') { state.cast.belt = node; node.visible = false; }
       } catch { /* a missing NPC should not stop the show */ }
     }
@@ -208,7 +237,7 @@ function teardown() {
   state.player = state.enemy = state.combat = state.bot = null;
   state.phase = 'menu';
   if (state.cast.belt) state.cast.belt.visible = false;
-  if (state.cast.referee && state.refHome) state.cast.referee.position.copy(state.refHome);
+  if (state.cast.referee && state.refHome) state.cast.referee.root.position.copy(state.refHome);
   state.refBreakUntil = 0;
   state.crowdActions.crowd_ovation?.stop();
   state.crowdActions.crowd_murmur?.play();
@@ -243,8 +272,9 @@ function updateWalkout(dt) {
 
   (state.cast.coaches || []).forEach((coach, i) => {
     const angle = i === 0 ? Math.PI * 0.25 : Math.PI * 1.25;
-    coach.position.set(Math.cos(angle) * 6.3, 0, Math.sin(angle) * 6.3);
-    coach.rotation.y = Math.atan2(-coach.position.x, -coach.position.z);
+    coach.root.position.set(Math.cos(angle) * 6.3, 0, Math.sin(angle) * 6.3);
+    coach.root.rotation.y = Math.atan2(-coach.root.position.x, -coach.root.position.z);
+    coach.mixer.update(dt);
   });
 
   march(lead, local, lead === state.player ? -1.1 : 1.1);
@@ -342,22 +372,38 @@ function updateReferee(dt) {
   const referee = state.cast.referee;
   if (!referee) return;
   const c = state.combat;
+  referee.mixer.update(dt);
   const mid = state.player.root.position.clone()
     .add(state.enemy.root.position).multiplyScalar(0.5);
 
+  const breaking = c.time < (state.refBreakUntil || 0);
   let wanted;
-  if (c.time < (state.refBreakUntil || 0)) {
-    wanted = mid.clone().setY(0);                     // in between them
+  if (breaking) {
+    wanted = mid.clone().setY(1.26);                  // in between them
   } else {
     const away = new THREE.Vector3()
       .subVectors(state.enemy.root.position, state.player.root.position);
     const side = new THREE.Vector3(-away.z, 0, away.x).normalize();
-    wanted = mid.clone().add(side.multiplyScalar(2.1)).setY(0);
+    wanted = mid.clone().add(side.multiplyScalar(2.1)).setY(1.26);
   }
   const r = Math.hypot(wanted.x, wanted.z);
   if (r > 3.9) { wanted.x *= 3.9 / r; wanted.z *= 3.9 / r; }
-  referee.position.lerp(wanted, Math.min(1, dt * 1.7));
-  referee.rotation.y = Math.atan2(mid.x - referee.position.x, mid.z - referee.position.z);
+  referee.root.position.lerp(wanted, Math.min(1, dt * 1.7));
+  referee.root.rotation.y = Math.atan2(mid.x - referee.root.position.x,
+    mid.z - referee.root.position.z);
+
+  // He watches from a crouch, breaks with both arms and counts a man down.
+  const clip = breaking ? 'ref_break'
+    : (c.ground ? 'ref_count' : 'ref_watch');
+  if (referee.state !== clip) { referee.state = clip; referee.play(clip, { fade: 0.25 }); }
+}
+
+function updateCoaches(dt, shouting) {
+  for (const coach of state.cast.coaches || []) {
+    coach.mixer.update(dt);
+    const clip = shouting ? 'coach_shout' : 'coach_watch';
+    if (coach.state !== clip) { coach.state = clip; coach.play(clip, { fade: 0.3 }); }
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -462,8 +508,8 @@ function updateBreak(dt) {
   // The coaches step up to the fence beside their man.
   (state.cast.coaches || []).forEach((coach, i) => {
     const angle = i === 0 ? Math.PI * 0.25 : Math.PI * 1.25;
-    coach.position.set(Math.cos(angle) * 6.3, 0, Math.sin(angle) * 6.3);
-    coach.rotation.y = Math.atan2(-coach.position.x, -coach.position.z);
+    coach.root.position.set(Math.cos(angle) * 6.3, 0, Math.sin(angle) * 6.3);
+    coach.root.rotation.y = Math.atan2(-coach.root.position.x, -coach.root.position.z);
   });
 
   const corner = state.player.root.position.clone().setY(2.0);
@@ -476,18 +522,25 @@ function updateCeremony(dt) {
   const winner = state.combat.winner;
   const loser = state.combat.loser;
 
-  // Referee brings the belt to the middle and puts it on him.
+  // The referee runs the whole ending: waves it off, fetches the belt,
+  // fastens it and lifts the winner's hand. Same order as a real card.
   const referee = state.cast.referee;
   if (referee) {
+    referee.mixer.update(dt);
     const beside = winner.root.position.clone()
-      .add(new THREE.Vector3(0.85, -1.26, 0.35));
-    referee.position.lerp(beside, Math.min(1, dt * 1.6));
-    referee.rotation.y = Math.atan2(
-      winner.root.position.x - referee.position.x,
-      winner.root.position.z - referee.position.z);
+      .add(new THREE.Vector3(0.78, 0, 0.42));
+    referee.root.position.lerp(beside, Math.min(1, dt * 1.6));
+    referee.root.rotation.y = Math.atan2(
+      winner.root.position.x - referee.root.position.x,
+      winner.root.position.z - referee.root.position.z);
+
+    const t = state.ceremonyClock;
+    const clip = t < 1.8 ? 'ref_wave_off' : (t < 6.4 ? 'ref_belt' : 'ref_raise_hand');
+    if (referee.state !== clip) { referee.state = clip; referee.play(clip, { fade: 0.3 }); }
   }
+  updateCoaches(dt, false);
   const belt = state.cast.belt;
-  if (belt && state.ceremonyClock > 1.6) {
+  if (belt && state.ceremonyClock > 3.4) {
     belt.visible = true;
     // Round the waist: the belt model is a metre long, so it sits at hip
     // height and turns with him.
@@ -496,7 +549,7 @@ function updateCeremony(dt) {
     belt.rotation.y = winner.root.rotation.y;
   }
 
-  const clip = state.ceremonyClock < 5.5 && winner.has('belt_receive')
+  const clip = state.ceremonyClock < 6.4 && winner.has('belt_receive')
     ? 'belt_receive' : (winner.has('walkoff') ? 'walkoff' : 'idle');
   if (winner.state !== clip) {
     winner.state = clip;
@@ -544,6 +597,7 @@ function frame() {
     state.combat.update(dt);
     drainEvents();
     updateReferee(dt);
+    updateCoaches(dt, state.combat.phase === 'between');
     if (state.combat.phase === 'between') updateBreak(dt);
     else rig.fight(state.player, state.enemy, dt);
     updateHud(dt);

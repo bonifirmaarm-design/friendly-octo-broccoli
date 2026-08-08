@@ -847,3 +847,154 @@ def moveset(fighter_key):
         if move in pool:
             clips[move] = pool[move]
     return clips, spec, stance, turn
+
+
+# ---------------------------------------------------------------------------
+# Staff: the referee and the corner coach
+#
+# They stand rather than fight, so they get their own base pose -- feet level,
+# arms down -- instead of a bladed stance. The referee's vocabulary is the one
+# you actually see: watching, breaking a stalled position, waving a fight off,
+# raising the winner's hand and putting the belt on him.
+# ---------------------------------------------------------------------------
+
+STAND = {
+    "hand_L": Reach((-0.22, -0.93, 0.30), 0.88),
+    "hand_R": Reach((0.22, -0.93, 0.30), 0.88),
+    "foot_L": p(0.13, 0.02, 0.02), "foot_R": p(-0.13, 0.02, -0.02),
+    "root": (0.0, -0.01, 0.0),
+    "hips": (0.0, 0.0, 0.0), "spine": (0.02, 0.0, 0.0), "chest": (0.0, 0.0, 0.0),
+    "head": (0.0, 0.0, 0.0),
+}
+
+
+def staff_clips(role):
+    g = STAND
+
+    common = {
+        "stand": (True, [
+            (0.00, pose(g)),
+            (1.60, pose(g, chest=(0.02, 0.05, 0.0), head=(0.03, 0.08, 0.0))),
+            (3.20, pose(g)),
+        ]),
+        "walk": (True, walk_cycle(g, stride=0.17, period=1.05, lift=0.09)),
+    }
+
+    if role == "coach":
+        return {
+            **common,
+            # Hands on the fence, shouting through it.
+            "coach_shout": (True, [
+                (0.00, pose(g, hand_L=Reach((-0.36, 0.30, 0.88), 0.80),
+                            hand_R=Reach((0.36, 0.30, 0.88), 0.80),
+                            chest=(0.16, 0.0, 0.0), head=(-0.10, 0.0, 0.0))),
+                (0.55, pose(g, hand_L=Reach((-0.30, 0.44, 0.85), 0.84),
+                            hand_R=Reach((0.42, 0.24, 0.87), 0.76),
+                            chest=(0.20, -0.06, 0.0), head=(-0.16, -0.06, 0.0))),
+                (1.10, pose(g, hand_L=Reach((-0.36, 0.30, 0.88), 0.80),
+                            hand_R=Reach((0.36, 0.30, 0.88), 0.80),
+                            chest=(0.16, 0.0, 0.0), head=(-0.10, 0.0, 0.0))),
+            ]),
+            # Arms folded, watching the round.
+            "coach_watch": (True, [
+                (0.00, pose(g, hand_L=Reach((0.55, -0.30, 0.78), 0.52),
+                            hand_R=Reach((-0.55, -0.30, 0.78), 0.52),
+                            chest=(0.06, 0.0, 0.0))),
+                (2.00, pose(g, hand_L=Reach((0.55, -0.28, 0.79), 0.53),
+                            hand_R=Reach((-0.55, -0.28, 0.79), 0.53),
+                            chest=(0.08, 0.02, 0.0), head=(0.04, 0.05, 0.0))),
+                (4.00, pose(g, hand_L=Reach((0.55, -0.30, 0.78), 0.52),
+                            hand_R=Reach((-0.55, -0.30, 0.78), 0.52),
+                            chest=(0.06, 0.0, 0.0))),
+            ]),
+        }
+
+    # -- referee ------------------------------------------------------------
+    return {
+        **common,
+        # Crouched over the action, hands ready to step in.
+        "ref_watch": (True, [
+            (0.00, pose(g, root=(0.0, -0.10, 0.0), chest=(0.24, 0.0, 0.0),
+                        head=(0.10, 0.0, 0.0),
+                        hand_L=Reach((-0.28, -0.42, 0.86), 0.72),
+                        hand_R=Reach((0.28, -0.42, 0.86), 0.72))),
+            (1.40, pose(g, root=(0.0, -0.12, 0.02), chest=(0.28, 0.10, 0.0),
+                        head=(0.12, 0.12, 0.0),
+                        hand_L=Reach((-0.30, -0.38, 0.87), 0.74),
+                        hand_R=Reach((0.26, -0.44, 0.86), 0.70))),
+            (2.80, pose(g, root=(0.0, -0.10, 0.0), chest=(0.24, 0.0, 0.0),
+                        head=(0.10, 0.0, 0.0),
+                        hand_L=Reach((-0.28, -0.42, 0.86), 0.72),
+                        hand_R=Reach((0.28, -0.42, 0.86), 0.72))),
+        ]),
+        # "Break!" -- both arms sweep apart between the fighters.
+        "ref_break": (False, [
+            (0.00, pose(g)),
+            (0.22, pose(g, hand_L=Reach((-0.12, 0.10, 0.98), 0.80),
+                        hand_R=Reach((0.12, 0.10, 0.98), 0.80),
+                        chest=(0.14, 0.0, 0.0), root=(0.0, -0.06, 0.06))),
+            (0.55, pose(g, hand_L=Reach((-0.92, 0.16, 0.36), 0.94),
+                        hand_R=Reach((0.92, 0.16, 0.36), 0.94),
+                        chest=(0.04, 0.0, 0.0), root=(0.0, -0.02, 0.02))),
+            (0.85, pose(g, hand_L=Reach((-0.92, 0.16, 0.36), 0.94),
+                        hand_R=Reach((0.92, 0.16, 0.36), 0.94))),
+            (1.25, pose(g)),
+        ]),
+        # Waving it off: arms cross overhead, twice.
+        "ref_wave_off": (False, [
+            (0.00, pose(g)),
+            (0.25, pose(g, hand_L=Reach((-0.62, 0.78, 0.10), 0.95),
+                        hand_R=Reach((0.62, 0.78, 0.10), 0.95))),
+            (0.55, pose(g, hand_L=Reach((0.34, 0.92, 0.10), 0.92),
+                        hand_R=Reach((-0.34, 0.92, 0.10), 0.92))),
+            (0.85, pose(g, hand_L=Reach((-0.62, 0.78, 0.10), 0.95),
+                        hand_R=Reach((0.62, 0.78, 0.10), 0.95))),
+            (1.15, pose(g, hand_L=Reach((0.34, 0.92, 0.10), 0.92),
+                        hand_R=Reach((-0.34, 0.92, 0.10), 0.92))),
+            (1.60, pose(g)),
+        ]),
+        # Counting a man down: pointing, arm dropping with each number.
+        "ref_count": (True, [
+            (0.00, pose(g, root=(0.0, -0.14, 0.0), chest=(0.30, 0.0, 0.0),
+                        hand_R=Reach((0.20, 0.62, 0.76), 0.86))),
+            (0.45, pose(g, root=(0.0, -0.14, 0.0), chest=(0.30, 0.0, 0.0),
+                        hand_R=Reach((0.24, 0.18, 0.95), 0.90))),
+            (0.90, pose(g, root=(0.0, -0.14, 0.0), chest=(0.30, 0.0, 0.0),
+                        hand_R=Reach((0.20, 0.62, 0.76), 0.86))),
+        ]),
+        # The winner's hand goes up: referee holds his wrist and lifts.
+        "ref_raise_hand": (False, [
+            (0.00, pose(g)),
+            (0.70, pose(g, hand_L=Reach((-0.48, 0.22, 0.85), 0.86),
+                        chest=(0.06, -0.14, 0.0))),
+            (1.60, pose(g, hand_L=Reach((-0.30, 0.92, 0.25), 0.97),
+                        chest=(-0.10, -0.10, 0.0), head=(-0.18, 0.0, 0.0))),
+            (3.20, pose(g, hand_L=Reach((-0.30, 0.92, 0.25), 0.97),
+                        chest=(-0.10, -0.10, 0.0), head=(-0.18, 0.0, 0.0))),
+            (3.90, pose(g)),
+        ]),
+        # Both hands take the belt and pass it round the champion's waist.
+        "ref_belt": (False, [
+            (0.00, pose(g)),
+            (0.60, pose(g, hand_L=Reach((-0.34, -0.18, 0.92), 0.82),
+                        hand_R=Reach((0.34, -0.18, 0.92), 0.82),
+                        chest=(0.18, 0.0, 0.0), head=(0.14, 0.0, 0.0))),
+            (1.50, pose(g, hand_L=Reach((-0.62, -0.02, 0.78), 0.90),
+                        hand_R=Reach((0.62, -0.02, 0.78), 0.90),
+                        chest=(0.24, 0.0, 0.0), head=(0.16, 0.0, 0.0),
+                        root=(0.0, -0.05, 0.06))),
+            (2.60, pose(g, hand_L=Reach((-0.86, 0.04, 0.50), 0.94),
+                        hand_R=Reach((0.86, 0.04, 0.50), 0.94),
+                        chest=(0.16, 0.0, 0.0), root=(0.0, -0.03, 0.02))),
+            (3.40, pose(g, hand_L=Reach((-0.40, 0.30, 0.86), 0.70),
+                        hand_R=Reach((0.40, 0.30, 0.86), 0.70),
+                        chest=(0.0, 0.0, 0.0))),
+            (4.00, pose(g)),
+        ]),
+    }
+
+
+STAFF = {
+    "official_referee": {"name": "referee", "role": "referee"},
+    "official_coach": {"name": "coach", "role": "coach"},
+}

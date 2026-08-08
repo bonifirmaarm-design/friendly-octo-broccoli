@@ -1,0 +1,9 @@
+newmtl official_coach
+Ka 0.000 0.000 0.000
+Kd 1.000 1.000 1.000
+Ks 0.200 0.200 0.200
+Ns 40.0
+d 1.0
+illum 2
+map_Kd official_coach_basecolor.jpg
+map_Pr official_coach_metallic_roughness.jpg
