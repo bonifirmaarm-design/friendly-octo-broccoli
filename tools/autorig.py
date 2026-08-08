@@ -16,8 +16,14 @@ Skin weights start as a hard nearest-bone assignment, masked by the
 segmentation so a chest vertex can never be claimed by a hand bone, and are
 then diffused across the mesh into smooth blends.
 
-    python3 tools/autorig.py                       # every assets/fighters/*.obj
+    python3 tools/autorig.py                       # every fighter and both officials
+    python3 tools/autorig.py --src assets/staff    # just one directory
     python3 tools/autorig.py --only fighter_apose_01 --test-pose
+
+The referee and the corner coach are rigged by the same code as the fighters
+and are picked up by default along with them. They used to have to be asked
+for by name, which meant a clean build produced a cage with nobody officiating
+it and said nothing about why.
 
 --test-pose bends the shoulders and knees in the exported file, which is the
 quickest way to see whether the weights deform sanely.
@@ -446,15 +452,29 @@ def rig(obj_path, out_path, test_pose=False):
 def main():
     ap = argparse.ArgumentParser(description=__doc__,
                                  formatter_class=argparse.RawDescriptionHelpFormatter)
-    ap.add_argument("--src", type=Path, default=REPO / "assets" / "fighters")
+    ap.add_argument("--src", type=Path, action="append",
+                    help="directory of .obj sources; repeatable, defaults to "
+                         "assets/fighters and assets/staff")
     ap.add_argument("--out", type=Path, default=REPO / "build" / "rigged")
     ap.add_argument("--only", action="append")
     ap.add_argument("--test-pose", action="store_true",
                     help="bend shoulders, elbows and knees in the export")
     args = ap.parse_args()
 
-    sources = ([args.src / f"{s}.obj" for s in args.only] if args.only
-               else sorted(args.src.glob("*.obj")))
+    roots = args.src or [REPO / "assets" / "fighters", REPO / "assets" / "staff"]
+    if args.only:
+        sources = []
+        for stem in args.only:
+            found = next((r / f"{stem}.obj" for r in roots
+                          if (r / f"{stem}.obj").exists()), None)
+            if found is None:
+                sys.exit(f"no such model: {stem}.obj in "
+                         + ", ".join(str(r) for r in roots))
+            sources.append(found)
+    else:
+        sources = [p for root in roots for p in sorted(root.glob("*.obj"))]
+    if not sources:
+        sys.exit("no .obj sources in " + ", ".join(str(r) for r in roots))
     args.out.mkdir(parents=True, exist_ok=True)
 
     for src in sources:

@@ -331,6 +331,16 @@ def main():
             print(f"{spec['name']:8} {src.stem:20} {len(tracks):2d} clips "
                   f"({attacks} атак)  {dst.stat().st_size / 1e6:5.2f} MB")
 
+    # Say so when somebody with a moveset never turned up. A cage with no
+    # referee in it is a build that went wrong two steps ago, and silence
+    # here sends you looking for the bug in the game instead.
+    if not args.only:
+        done = {src.stem for src in sources}
+        missing = [k for k in (*moves.FIGHTERS, *moves.STAFF) if k not in done]
+        if missing:
+            print(f"\nНЕТ СКЕЛЕТА: {', '.join(missing)}")
+            print(f"  их нет в {args.src} — запусти python3 tools/autorig.py")
+
 
 if __name__ == "__main__":
     main()
