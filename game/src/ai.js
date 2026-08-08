@@ -28,6 +28,24 @@ export class Bot {
     const c = this.combat;
     if (c.phase !== 'fight') return;
     const me = this.me;
+
+    // On the ground the choices are different: hit from the top, work to get
+    // out from the bottom. Treating it as "busy, do nothing" is what makes a
+    // bot lie there until the referee stands him up.
+    if (c.ground) {
+      if (c.time < this.nextDecision) return;
+      if (c.ground.top === me) {
+        c.groundStrike(me);
+        this.nextDecision = c.time + 0.5 + Math.random() * 0.5;
+      } else if (c.ground.bottom === me) {
+        const wrestler = me.profile.stats.grappling > 80;
+        c.groundEscape(me, wrestler && Math.random() < 0.45
+          ? 'ground_sweep' : 'ground_escape');
+        this.nextDecision = c.time + 1.4 + Math.random() * 0.8;
+      }
+      return;
+    }
+
     if (c.time < me.busyUntil || me.grounded) return;
     if (c.time < this.nextDecision) { this.walk(dt); return; }
 

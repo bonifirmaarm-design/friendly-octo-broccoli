@@ -301,6 +301,151 @@ def base_clips(stance=None):
                         chest=(-0.10, 0.0, 0.0))),
             (1.40, pose(g)),
         ]),
+        **ground_clips(g),
+        **corner_clips(g),
+    }
+
+
+# ---------------------------------------------------------------------------
+# The ground
+#
+# A takedown that ends the exchange is not MMA. What happens after it is a
+# position: one man on top inside the other's legs, the man underneath working
+# to stand or to reverse. These are held poses more than motions -- the top
+# game is mostly stillness punctuated by short, heavy strikes -- so they loop
+# and the game blends between them.
+# ---------------------------------------------------------------------------
+
+FLOOR = -0.42          # how far the hips drop to lie on the mat
+
+
+def ground_clips(g):
+    flat = {"root": (0.0, FLOOR, 0.0)}
+
+    def bottom(**over):
+        """On his back, hips down, knees up: the guard."""
+        base = dict(hips=(-1.35, 0.0, 0.0), chest=(0.30, 0.0, 0.0),
+                    head=(0.30, 0.0, 0.0),
+                    foot_L=p(0.22, 0.30, 0.22), foot_R=p(-0.23, 0.28, 0.20),
+                    hand_L=Reach((-0.20, 0.55, 0.80), 0.60),
+                    hand_R=Reach((0.20, 0.55, 0.80), 0.60), **flat)
+        return pose(g, **{**base, **over})
+
+    def top(**over):
+        """Kneeling over him, posted on one hand."""
+        base = dict(hips=(0.55, 0.0, 0.0), chest=(0.32, 0.0, 0.0),
+                    head=(0.10, 0.0, 0.0), root=(0.0, -0.30, 0.10),
+                    foot_L=p(0.26, 0.06, -0.34), foot_R=p(-0.27, 0.06, -0.36),
+                    hand_L=Reach((-0.18, -0.72, 0.67), 0.90),
+                    hand_R=Reach((0.18, -0.55, 0.81), 0.85))
+        return pose(g, **{**base, **over})
+
+    return {
+        "ground_bottom": (True, [
+            (0.00, bottom()),
+            (1.10, bottom(chest=(0.34, 0.06, 0.0), foot_L=p(0.23, 0.33, 0.24))),
+            (2.20, bottom()),
+        ]),
+        "ground_top": (True, [
+            (0.00, top()),
+            (1.20, top(chest=(0.36, -0.08, 0.0))),
+            (2.40, top()),
+        ]),
+        # From the bottom: bridge the hips, frame, and scramble up.
+        "ground_escape": (False, [
+            (0.00, bottom()),
+            (0.30, bottom(hips=(-1.05, 0.22, 0.0), root=(0.0, FLOOR + 0.10, -0.04),
+                          chest=(0.10, 0.20, 0.0),
+                          foot_L=p(0.24, 0.16, 0.10), foot_R=p(-0.25, 0.14, 0.08))),
+            (0.70, pose(g, hips=(-0.55, 0.25, 0.0), root=(0.0, -0.24, -0.12),
+                        chest=(-0.15, 0.15, 0.0),
+                        foot_L=p(0.22, 0.14, -0.24), foot_R=p(-0.24, 0.10, -0.28),
+                        hand_L=p(0.30, 0.32, -0.08), hand_R=p(-0.30, 0.30, -0.14))),
+            (1.15, pose(g, hips=(-0.20, 0.0, 0.0), root=(0.0, -0.06, -0.04))),
+            (1.45, pose(g)),
+        ]),
+        # Reverse him: hook the leg, turn the hips over, come up on top.
+        "ground_sweep": (False, [
+            (0.00, bottom()),
+            (0.28, bottom(hips=(-1.15, -0.40, 0.0), chest=(0.28, -0.30, 0.0),
+                          foot_L=p(0.26, 0.20, 0.26))),
+            (0.62, pose(g, hips=(-0.30, -1.10, 0.0), chest=(0.20, -0.60, 0.0),
+                        root=(0.10, FLOOR + 0.14, 0.06),
+                        foot_L=p(0.24, 0.12, -0.10), foot_R=p(-0.22, 0.16, 0.14),
+                        hand_L=p(0.32, 0.20, 0.18), hand_R=p(-0.28, 0.26, -0.06))),
+            (1.00, top(hips=(0.50, -0.35, 0.0), chest=(0.30, -0.20, 0.0))),
+            (1.30, top()),
+        ]),
+        # The referee waves it off and both men are stood back up.
+        "stand_up": (False, [
+            (0.00, top()),
+            (0.45, pose(g, hips=(-0.40, 0.0, 0.0), root=(0.0, -0.20, -0.06),
+                        chest=(-0.20, 0.0, 0.0),
+                        foot_L=p(0.20, 0.12, -0.20), foot_R=p(-0.22, 0.10, -0.24),
+                        hand_L=p(0.30, 0.40, -0.02), hand_R=p(-0.30, 0.38, -0.08))),
+            (0.90, pose(g, hips=(-0.15, 0.0, 0.0), root=(0.0, -0.06, 0.0))),
+            (1.20, pose(g)),
+        ]),
+    }
+
+
+# ---------------------------------------------------------------------------
+# The corner, and what happens after the final bell
+# ---------------------------------------------------------------------------
+
+def corner_clips(g):
+    seated = {"root": (0.0, -0.26, 0.0),
+              "hips": (0.42, 0.0, 0.0), "chest": (-0.10, 0.0, 0.0),
+              "foot_L": p(0.20, 0.02, 0.30), "foot_R": p(-0.21, 0.02, 0.28)}
+
+    def stool(**over):
+        base = dict(hand_L=Reach((-0.30, -0.62, 0.72), 0.72),
+                    hand_R=Reach((0.30, -0.62, 0.72), 0.72), **seated)
+        return pose(g, **{**base, **over})
+
+    return {
+        "corner_sit": (True, [
+            (0.00, stool()),
+            (1.30, stool(chest=(-0.06, 0.0, 0.0), head=(0.06, 0.0, 0.0))),
+            (2.60, stool()),
+        ]),
+        # Bottle to the mouth, head tipped back, then handed away.
+        "drink": (False, [
+            (0.00, stool()),
+            (0.45, stool(hand_R=Reach((0.10, 0.62, 0.78), 0.55),
+                         head=(-0.30, 0.0, 0.0), chest=(-0.16, 0.0, 0.0))),
+            (1.40, stool(hand_R=Reach((0.06, 0.72, 0.69), 0.50),
+                         head=(-0.42, 0.0, 0.0), chest=(-0.20, 0.0, 0.0))),
+            (1.90, stool(hand_R=Reach((0.20, 0.30, 0.93), 0.70), head=(-0.10, 0.0, 0.0))),
+            (2.30, stool()),
+        ]),
+        # The towel goes over the face and round the back of the neck.
+        "towel": (False, [
+            (0.00, stool()),
+            (0.40, stool(hand_L=Reach((-0.14, 0.66, 0.74), 0.52),
+                         head=(0.10, 0.0, 0.0))),
+            (0.95, stool(hand_L=Reach((-0.26, 0.74, 0.62), 0.48),
+                         head=(0.16, 0.14, 0.0), chest=(-0.04, 0.10, 0.0))),
+            (1.50, stool(hand_L=Reach((0.10, 0.78, 0.62), 0.50),
+                         head=(0.14, -0.14, 0.0), chest=(-0.04, -0.10, 0.0))),
+            (2.05, stool()),
+        ]),
+        # Arms out and up while the belt goes round the waist, then held aloft.
+        "belt_receive": (False, [
+            (0.00, pose(g)),
+            (0.60, pose(g, hand_L=Reach((-0.72, 0.30, 0.62), 0.78),
+                        hand_R=Reach((0.72, 0.30, 0.62), 0.78),
+                        chest=(-0.10, 0.0, 0.0), head=(-0.12, 0.0, 0.0))),
+            (1.80, pose(g, hand_L=Reach((-0.72, 0.30, 0.62), 0.78),
+                        hand_R=Reach((0.72, 0.30, 0.62), 0.78),
+                        chest=(-0.10, 0.0, 0.0), head=(-0.12, 0.0, 0.0))),
+            (2.60, pose(g, hand_L=Reach((-0.34, 0.90, 0.28), 0.92),
+                        hand_R=Reach((0.34, 0.90, 0.28), 0.92),
+                        chest=(-0.20, 0.0, 0.0), head=(-0.26, 0.0, 0.0))),
+            (4.20, pose(g, hand_L=Reach((-0.34, 0.90, 0.28), 0.92),
+                        hand_R=Reach((0.34, 0.90, 0.28), 0.92),
+                        chest=(-0.20, 0.0, 0.0), head=(-0.26, 0.0, 0.0))),
+        ]),
     }
 
 

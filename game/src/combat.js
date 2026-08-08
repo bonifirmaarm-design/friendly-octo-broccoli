@@ -16,6 +16,7 @@ export class Combat {
     this.roundClock = this.roundLength;
     this.phase = 'fight';        // fight | between | over
     this.breakClock = 0;
+    this.ground = null;          // { top, bottom, since, lastAction }
     this.events = [];            // consumed by the HUD and the camera
     this.winner = null;
   }
@@ -83,11 +84,7 @@ export class Combat {
     defender.health = Math.max(0, defender.health - damage);
 
     if (spec.takedown && !blocking) {
-      defender.grounded = true;
-      attacker.grounded = true;
-      defender.play('takedown_double_leg_victim', { fade: 0.08 });
-      defender.busyUntil = this.time + 1.4;
-      attacker.busyUntil = this.time + 1.2;
+      this.toGround(attacker, defender);
       this.emit('takedown', { by: attacker.profile.id, move, damage });
       return;
     }
@@ -113,6 +110,99 @@ export class Combat {
       { fade: 0.05 });
     defender.busyUntil = this.time + 0.26;
     this.emit('hit', { by: attacker.profile.id, move, damage });
+  }
+
+  // -- the ground -----------------------------------------------------------
+  //
+  // A takedown that ends the exchange is not MMA. What follows is a position:
+  // one man on top, the other working to stand or reverse, and a referee who
+  // stands them both up if nothing happens for long enough.
+
+  toGround(top, bottom) {
+    this.ground = { top, bottom, since: this.time, lastAction: this.time };
+    for (const f of [top, bottom]) { f.grounded = true; f.pending = null; }
+    top.play('ground_top', { fade: 0.15 });
+    bottom.play('ground_bottom', { fade: 0.15 });
+    top.state = 'ground-top';
+    bottom.state = 'ground-bottom';
+    top.busyUntil = bottom.busyUntil = this.time + 0.9;
+    this.emit('ground', { top: top.profile.id, bottom: bottom.profile.id });
+  }
+
+  groundStrike(fighter) {
+    const g = this.ground;
+    if (!g || g.top !== fighter || this.time < fighter.busyUntil) return false;
+    if (fighter.stamina < 5) return false;
+    fighter.stamina -= 5;
+    fighter.play('ground_pound', { fade: 0.08 });
+    fighter.busyUntil = this.time + 0.42;
+    g.lastAction = this.time;
+
+    const power = fighter.profile.stats.power / 100;
+    const chin = g.bottom.profile.stats.chin / 100;
+    const damage = 7 * (0.75 + power * 0.5) / (0.7 + chin * 0.45);
+    g.bottom.health = Math.max(0, g.bottom.health - damage);
+    this.emit('hit', { by: fighter.profile.id, move: 'ground_pound', damage, ground: true });
+    if (g.bottom.health <= 0) {
+      g.bottom.play('knockdown', { fade: 0.06 });
+      this.emit('knockdown', { by: fighter.profile.id, move: 'ground_pound' });
+      this.finish(fighter, g.bottom, 'остановка в партере');
+    }
+    return true;
+  }
+
+  groundEscape(fighter, kind = 'ground_escape') {
+    const g = this.ground;
+    if (!g || g.bottom !== fighter || this.time < fighter.busyUntil) return false;
+    const cost = kind === 'ground_sweep' ? 22 : 16;
+    if (fighter.stamina < cost) return false;
+    fighter.stamina -= cost;
+    g.lastAction = this.time;
+
+    // Grappling decides it. A wrestler holds the man underneath down; a
+    // striker on top gets reversed.
+    const mine = fighter.profile.stats.grappling;
+    const theirs = g.top.profile.stats.grappling;
+    const chance = 0.28 + (mine - theirs) / 220;
+    fighter.play(kind, { fade: 0.1 });
+    fighter.busyUntil = this.time + fighter.clipLength(kind);
+
+    if (Math.random() < chance) {
+      if (kind === 'ground_sweep') {
+        const wasTop = g.top;
+        this.toGround(fighter, wasTop);
+        this.emit('sweep', { by: fighter.profile.id });
+      } else {
+        this.standUp('встал');
+      }
+      return true;
+    }
+    this.emit('escape-failed', { by: fighter.profile.id });
+    return true;
+  }
+
+  standUp(reason) {
+    const g = this.ground;
+    if (!g) return;
+    for (const f of [g.top, g.bottom]) {
+      f.grounded = false;
+      f.state = 'idle';
+      f.play(f.has('stand_up') ? 'stand_up' : 'get_up', { fade: 0.15 });
+      f.busyUntil = this.time + 0.9;
+    }
+    this.ground = null;
+    this.emit('stand-up', { reason });
+  }
+
+  updateGround(dt) {
+    const g = this.ground;
+    if (!g) return;
+    // The referee steps in when the position has gone nowhere. Twelve seconds
+    // is short for a real fight and about right for a game.
+    if (this.time - g.lastAction > 12) {
+      this.emit('referee-break', {});
+      this.standUp('судья поднял');
+    }
   }
 
   finish(winner, loser, how) {
@@ -151,12 +241,15 @@ export class Combat {
         const loser = winner === this.player ? this.bot : this.player;
         this.finish(winner, loser, 'решение судей');
       } else {
+        if (this.ground) this.standUp('конец раунда');
         this.phase = 'between';
         this.breakClock = 14;
         this.emit('round-end', { round: this.round });
       }
       return;
     }
+
+    this.updateGround(dt);
 
     for (const attacker of [this.player, this.bot]) {
       const pending = attacker.pending;
@@ -171,16 +264,20 @@ export class Combat {
   stepFighters(dt) {
     for (const f of [this.player, this.bot]) {
       f.update(dt);
-      if (this.time >= f.busyUntil && f.state !== 'idle') {
+      if (this.time < f.busyUntil) continue;
+      if (this.ground && (f === this.ground.top || f === this.ground.bottom)) {
+        // Hold the position rather than standing him up: on the ground the
+        // loop *is* the state, and only an escape, a sweep or the referee
+        // ends it.
+        const clip = f === this.ground.top ? 'ground_top' : 'ground_bottom';
+        f.state = f === this.ground.top ? 'ground-top' : 'ground-bottom';
+        f.play(clip, { fade: 0.25, restart: false });
+        continue;
+      }
+      if (f.state !== 'idle') {
         f.state = 'idle';
-        if (f.grounded && this.phase !== 'over') {
-          f.grounded = false;
-          f.play('get_up', { fade: 0.12 });
-          f.busyUntil = this.time + f.clipLength('get_up');
-          f.state = 'getting-up';
-        } else if (!f.grounded) {
-          f.play('idle', { fade: 0.22, restart: false });
-        }
+        f.grounded = false;
+        f.play('idle', { fade: 0.22, restart: false });
       }
     }
     this.player.faceTowards(this.bot, 0.12);
@@ -189,6 +286,7 @@ export class Combat {
   }
 
   separate() {
+    if (this.ground) return;
     const a = this.player.root.position;
     const b = this.bot.root.position;
     const dx = b.x - a.x, dz = b.z - a.z;

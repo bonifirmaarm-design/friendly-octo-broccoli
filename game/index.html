@@ -39,6 +39,8 @@
     padding: 18px; cursor: pointer; transition: .15s; }
   .card:hover { border-color: #4a5470; transform: translateY(-2px); }
   .card.sel { border-color: var(--hot); box-shadow: 0 0 0 1px var(--hot) inset; }
+  .card .shot { height: 190px; margin: -6px -6px 10px; border-radius: 9px;
+    background: #0c0e14 center/contain no-repeat; }
   .card h3 { margin: 0 0 2px; font-size: 21px; }
   .card .tag { color: var(--hot); font-size: 12px; letter-spacing: .12em;
     text-transform: uppercase; }
@@ -111,6 +113,27 @@
     <div class="cols">
       <div><h2>Клавиатура</h2><table id="bind-table"></table></div>
       <div>
+        <h2>Комбинации</h2>
+        <table>
+          <tr><td><kbd>J</kbd> <kbd>K</kbd></td><td>Двойка: джеб и сразу кросс</td></tr>
+          <tr><td><kbd>J</kbd> <kbd>K</kbd> <kbd>U</kbd></td><td>Тройка с хуком</td></tr>
+          <tr><td><kbd>K</kbd> <kbd>H</kbd></td><td>Кросс и лоу-кик по опорной</td></tr>
+          <tr><td><kbd>J</kbd> <kbd>G</kbd></td><td>Джеб и сразу проход в ноги</td></tr>
+          <tr><td><kbd>L</kbd></td><td>Готовая фирменная связка бойца</td></tr>
+        </table>
+        <p class="note">Связки не заскриптованы: следующий удар просто нужно
+          нажать, пока предыдущий доигрывает. Успел — пошла серия, опоздал —
+          боец вернулся в стойку.</p>
+
+        <h2>В партере</h2>
+        <table>
+          <tr><td><kbd>J</kbd></td><td>Сверху: бить</td></tr>
+          <tr><td><kbd>G</kbd></td><td>Снизу: вставать</td></tr>
+          <tr><td><kbd>U</kbd></td><td>Снизу: переворот</td></tr>
+        </table>
+        <p class="note">Если внизу ничего не происходит 12 секунд, судья
+          поднимает обоих в стойку.</p>
+
         <h2>macOS</h2><table id="mac-table"></table>
         <h2>Как это работает</h2>
         <p class="note">Удар засчитывается не в момент нажатия, а в середине
