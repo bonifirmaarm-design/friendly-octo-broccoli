@@ -41,7 +41,10 @@ CIRCUMRADIUS = APOTHEM / np.cos(np.pi / 8)
 
 MATERIALS = {
     "canvas": pbr((0.72, 0.73, 0.76), roughness=0.95),
-    "canvas_logo": pbr((0.16, 0.20, 0.30), roughness=0.9),
+    # The centre marking is the one piece of colour on a white canvas, so it
+    # is the thing that says "promotion" rather than "grey floor". Dark blue
+    # on off-white read as a smudge from the broadcast camera.
+    "canvas_logo": pbr((0.62, 0.06, 0.20), roughness=0.9),
     "apron": pbr((0.10, 0.10, 0.12), roughness=0.9),
     "padding": pbr((0.05, 0.05, 0.06), roughness=0.75),
     "wire": pbr((0.55, 0.57, 0.60), metallic=0.9, roughness=0.35),

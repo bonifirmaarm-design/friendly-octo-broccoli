@@ -26,10 +26,16 @@ export function lightArena(scene) {
   // the key at 15 m wants ~800 while the little lamp two metres off the
   // stairs wants ~20. Guessing one number for all of them is what produced
   // first a black arena and then a white one.
+  //
+  // The decay has to be 2 for any of that arithmetic to hold. It was 1.15,
+  // which at fifteen metres is a tenth of the falloff -- so the key arrived
+  // roughly ten times over, and the arena came out as a sheet of white with
+  // the fighters bleached into it. That is the third time this lighting has
+  // been wrong and the first time the numbers and the model agree.
   scene.add(new THREE.HemisphereLight(0x44557a, 0x0d0f16, 0.22));
   scene.add(new THREE.AmbientLight(0x2a3244, 0.14));
 
-  const key = new THREE.SpotLight(0xfff3e0, 820, 46, Math.PI / 4.4, 0.5, 1.15);   // d≈15 m
+  const key = new THREE.SpotLight(0xfff3e0, 820, 46, Math.PI / 4.4, 0.5, 2);   // d≈15 m
   key.position.set(0, 15, 0);
   key.target.position.set(0, 1.2, 0);
   key.castShadow = true;
@@ -40,7 +46,7 @@ export function lightArena(scene) {
   scene.add(key, key.target);
 
   for (const [x, z, colour] of [[8, 8, 0xbcd2ff], [-8, -8, 0xffd9b0]]) {
-    const rake = new THREE.SpotLight(colour, 300, 50, Math.PI / 5, 0.65, 1.25);   // d≈14 m
+    const rake = new THREE.SpotLight(colour, 300, 50, Math.PI / 5, 0.65, 2);   // d≈14 m
     rake.position.set(x, 11, z);
     rake.target.position.set(0, 1.4, 0);
     scene.add(rake, rake.target);
@@ -48,12 +54,12 @@ export function lightArena(scene) {
 
   // The tunnel gets its own light, otherwise the walkout happens in the dark:
   // every other lamp is aimed at the cage.
-  const tunnel = new THREE.SpotLight(0xcfd8ee, 190, 30, Math.PI / 3.4, 0.7, 1.2);   // d≈7 m
+  const tunnel = new THREE.SpotLight(0xcfd8ee, 190, 30, Math.PI / 3.4, 0.7, 2);   // d≈7 m
   tunnel.position.set(0, 4.2, -16);
   tunnel.target.position.set(0, 0.8, -9);
   scene.add(tunnel, tunnel.target);
 
-  const ramp = new THREE.PointLight(0xffe6c4, 22, 18, 1.2);   // d≈2.5 m
+  const ramp = new THREE.PointLight(0xffe6c4, 22, 18, 2);   // d≈2.5 m
   ramp.position.set(0, 3.4, -7.4);
   scene.add(ramp);
   return key;
